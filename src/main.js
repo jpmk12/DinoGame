@@ -14,6 +14,10 @@ import {
 import { SPECIES, PLAYABLE_SPECIES } from './dinos.js';
 import { preloadAllModels, modelStatus } from './modelLoader.js';
 
+// Tell the boot watchdog (defined in index.html) that the module loaded
+// successfully and all imports resolved.
+if (window.__dinoBoot) window.__dinoBoot.stage = 'imports-resolved';
+
 // ---------------- Scene / renderer setup ----------------
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -128,6 +132,7 @@ function buildPicker() {
   }
 }
 buildPicker();
+if (window.__dinoBoot) window.__dinoBoot.stage = 'main-ran';
 
 document.getElementById('respawn-btn').addEventListener('click', () => {
   const species = player.userData.species;

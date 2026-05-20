@@ -60,9 +60,10 @@
   </div>
 
   <script>
-    // Catch errors before the module even runs so they're visible on-screen
-    // (no devtools on a phone). Visible during startup; gameplay errors logged too.
+    // On-screen diagnostics — no devtools on a phone, and some browsers
+    // don't bubble module-load errors to window.onerror.
     (function () {
+      window.__dinoBoot = { stage: 'html-parsed' };
       const show = (msg) => {
         const b = document.getElementById('error-banner');
         const t = document.getElementById('error-text');
@@ -71,12 +72,43 @@
           b.classList.remove('hidden');
         }
       };
+      window.__dinoShowError = show;
+
       window.addEventListener('error', (e) => {
-        show((e.message || 'Unknown error') + '\n' + (e.filename || '') +
-             (e.lineno ? ':' + e.lineno : ''));
-      });
+        // Catches both script errors and asset load failures (<script>, <link>)
+        const tgt = e.target;
+        if (tgt && (tgt.src || tgt.href)) {
+          show('Failed to load: ' + (tgt.src || tgt.href));
+        } else {
+          show((e.message || 'Unknown error') + '\n' + (e.filename || '') +
+               (e.lineno ? ':' + e.lineno : ''));
+        }
+      }, true);
       window.addEventListener('unhandledrejection', (e) => {
         show('Promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+      });
+
+      // Watchdog: if main.js hasn't run 4s after the page loaded, something
+      // (extension, CDN block, parse error) is preventing the module from
+      // executing. Show a helpful diagnostic.
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          if (window.__dinoBoot.stage !== 'main-ran') {
+            const picker = document.getElementById('picker');
+            const hasButtons = picker && picker.children.length > 0;
+            if (!hasButtons) {
+              show(
+                'The game module did not load.\n' +
+                'Last stage: ' + window.__dinoBoot.stage + '\n\n' +
+                'Likely cause: a browser extension or network is blocking\n' +
+                'https://unpkg.com (Three.js CDN). Try:\n' +
+                '  - Disable ad/script blockers for this site\n' +
+                '  - Open in a private/incognito window\n' +
+                '  - Hard refresh (Cmd/Ctrl+Shift+R)'
+              );
+            }
+          }
+        }, 4000);
       });
     })();
   </script>
