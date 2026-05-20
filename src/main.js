@@ -11,6 +11,8 @@ import {
   STAGE_THRESHOLD,
   MAX_GROWTH,
 } from './entities.js';
+import { SPECIES, PLAYABLE_SPECIES } from './dinos.js';
+import { preloadAllModels, modelStatus } from './modelLoader.js';
 
 // ---------------- Scene / renderer setup ----------------
 const canvas = document.getElementById('game');
@@ -79,14 +81,19 @@ const gameOverEl = document.getElementById('game-over');
 const titleScreen = document.getElementById('title-screen');
 
 // ---------------- Start / restart ----------------
+function applyPlayerScale() {
+  const stage = player.userData.stage;
+  const sm = player.userData.scaleMult || 1.0;
+  player.scale.setScalar(STAGE_SCALE[stage] * sm);
+}
+
 function startGame(species) {
-  // Clean prior run
   if (player) scene.remove(player);
   if (entities) scene.remove(entities);
 
   player = buildPlayer(species);
   player.position.set(0, 0, 0);
-  player.scale.setScalar(STAGE_SCALE[0]);
+  applyPlayerScale();
   scene.add(player);
 
   entities = populate(scene, player.position);
@@ -100,15 +107,29 @@ function startGame(species) {
   gameOverEl.classList.add('hidden');
 }
 
-// Dino picker on the title screen
-for (const btn of document.querySelectorAll('.dino-choice')) {
-  btn.addEventListener('click', () => {
-    startGame(btn.dataset.species);
-  });
+// Build the dino picker dynamically from the SPECIES registry.
+function buildPicker() {
+  const picker = document.getElementById('picker');
+  if (!picker) return;
+  picker.innerHTML = '';
+  for (const key of PLAYABLE_SPECIES) {
+    const spec = SPECIES[key];
+    const btn = document.createElement('button');
+    btn.className = 'dino-choice';
+    btn.dataset.species = key;
+    const hex = '#' + spec.color.toString(16).padStart(6, '0');
+    btn.innerHTML = `
+      <div class="dino-preview" style="background:${hex}"></div>
+      <div class="dino-name">${spec.name.toUpperCase()}</div>
+      <div class="dino-desc">${spec.desc}</div>
+    `;
+    btn.addEventListener('click', () => startGame(key));
+    picker.appendChild(btn);
+  }
 }
+buildPicker();
 
 document.getElementById('respawn-btn').addEventListener('click', () => {
-  // Respawn with one stage less, minimum stage 0
   const species = player.userData.species;
   const lostStage = Math.max(0, player.userData.stage - 1);
   scene.remove(player);
@@ -116,13 +137,24 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   player = buildPlayer(species);
   player.userData.stage = lostStage;
   player.userData.growth = STAGE_THRESHOLD[lostStage];
-  player.scale.setScalar(STAGE_SCALE[lostStage]);
+  applyPlayerScale();
   player.position.set(0, 0, 0);
   scene.add(player);
   entities = populate(scene, player.position);
   gameRunning = true;
   updateHUD();
   gameOverEl.classList.add('hidden');
+});
+
+// Preload any Quaternius GLB models present in /models/.
+// Always resolves — missing files just stay on procedural meshes.
+preloadAllModels().then(() => {
+  const s = modelStatus();
+  if (s.loaded.length > 0) {
+    console.log(`[DinoGrow] Loaded ${s.loaded.length}/${s.total} GLB models:`, s.loaded);
+  } else {
+    console.log('[DinoGrow] Using procedural dinos (no GLB models in /models/).');
+  }
 });
 
 // ---------------- HUD ----------------
@@ -157,12 +189,33 @@ function showStageUp(stage) {
 // ---------------- Animation helpers ----------------
 function animateDino(d, dt, moving) {
   const parts = d.userData.parts;
-  if (!parts) return;
+  // GLB models don't have procedural parts — do a whole-body bob instead.
+  if (!parts || Object.keys(parts).length === 0) {
+    d.userData.walkPhase = (d.userData.walkPhase || 0) + dt * (moving ? 8 : 2);
+    if (d.userData.flying) {
+      const base = d.userData.flyHeight || 1.5;
+      d.position.y = base + Math.sin(d.userData.walkPhase * 1.2) * 0.25;
+    } else {
+      d.position.y = moving
+        ? Math.abs(Math.sin(d.userData.walkPhase * 1.5)) * 0.08
+        : 0;
+    }
+    return;
+  }
   if (moving) {
     d.userData.walkPhase += dt * 10;
   }
   const ph = d.userData.walkPhase;
   const swing = moving ? Math.sin(ph) * 0.6 : Math.sin(ph * 0.3) * 0.05;
+  // Pteranodon flaps its wings instead of stepping legs
+  if (parts.flying) {
+    if (parts.wingL) parts.wingL.rotation.z = 0.15 + Math.sin(ph * 1.5) * 0.4;
+    if (parts.wingR) parts.wingR.rotation.z = -0.15 - Math.sin(ph * 1.5) * 0.4;
+    const base = d.userData.flyHeight || 1.5;
+    d.position.y = base + Math.sin(ph * 1.2) * 0.25;
+    if (parts.tail2) parts.tail2.rotation.x = Math.sin(ph * 0.5) * 0.1;
+    return;
+  }
   if (parts.legL) parts.legL.rotation.x = swing;
   if (parts.legR) parts.legR.rotation.x = -swing;
   if (parts.quad) {
@@ -213,7 +266,8 @@ function frame() {
 
 function updatePlayer(dt) {
   const stage = player.userData.stage;
-  const baseSpeed = 4 + stage * 0.8;
+  const speedMult = player.userData.speedMult || 1.0;
+  const baseSpeed = (4 + stage * 0.8) * speedMult;
   const mv = controls.move;
   const speed = Math.hypot(mv.x, mv.y);
   let moving = false;
@@ -253,8 +307,8 @@ const _tmpA = new THREE.Vector3();
 
 function updateEntities(dt) {
   const playerStage = player.userData.stage;
-  const playerScale = STAGE_SCALE[playerStage];
-  const playerSize = playerScale * 1.5;
+  const playerScale =
+    STAGE_SCALE[playerStage] * (player.userData.scaleMult || 1.0);
 
   for (const ent of entities.children) {
     const d = ent.userData;
@@ -348,10 +402,8 @@ function updateEntities(dt) {
 
 function handleEating(dt) {
   const stage = player.userData.stage;
-  const playerScale = STAGE_SCALE[stage];
+  const playerScale = STAGE_SCALE[stage] * (player.userData.scaleMult || 1.0);
   const playerSize = playerScale * 1.5;
-  // Reach is roughly in front of dino
-  const reach = playerSize * 1.3;
   // Auto-eat when collision happens; chomp button just plays animation
   // and gives a small bonus (we use it to extend reach slightly)
   const reachBoost = player.userData.chompTimer > 0 ? 1.5 : 1.0;
@@ -412,8 +464,7 @@ function addGrowth(amount) {
     player.userData.growth >= STAGE_THRESHOLD[player.userData.stage + 1]
   ) {
     player.userData.stage += 1;
-    const ns = STAGE_SCALE[player.userData.stage];
-    player.scale.setScalar(ns);
+    applyPlayerScale();
     showStageUp(player.userData.stage);
   }
   updateHUD();

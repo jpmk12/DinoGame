@@ -117,24 +117,32 @@ html, body {
 }
 
 #picker {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: min(92vw, 520px);
+  max-height: 65vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+@media (min-width: 640px) {
+  #picker {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .dino-choice {
   background: #fff;
-  border: 5px solid #2a5a3a;
-  border-radius: 20px;
-  padding: 14px 18px;
+  border: 4px solid #2a5a3a;
+  border-radius: 18px;
+  padding: 10px 8px;
   font-family: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  min-width: 140px;
+  gap: 4px;
   transition: transform 0.1s;
 }
 
@@ -143,35 +151,29 @@ html, body {
 }
 
 .dino-preview {
-  width: 80px;
-  height: 80px;
+  width: 60px;
+  height: 60px;
   border-radius: 12px;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-}
-
-.trex-preview {
-  background-color: #8b3a3a;
-  background-image: radial-gradient(circle at 30% 30%, #c25555 0%, #8b3a3a 70%);
-}
-
-.trike-preview {
-  background-color: #5a7a3a;
-  background-image: radial-gradient(circle at 30% 30%, #8aae5a 0%, #5a7a3a 70%);
+  box-shadow: inset -6px -8px 0 rgba(0, 0, 0, 0.2);
 }
 
 .dino-name {
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 900;
   color: #2a5a3a;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+  text-align: center;
+  line-height: 1.1;
 }
 
 .dino-desc {
-  font-size: 12px;
+  font-size: 10px;
   color: #5a7a3a;
   font-weight: 600;
+  text-align: center;
 }
 
 /* ---------- Touch controls ---------- */

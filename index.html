@@ -12,7 +12,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
   }
 }
 </script>
@@ -37,18 +38,7 @@
     <h1>DinoGrow</h1>
     <p class="subtitle">Eat. Grow. Become a giant!</p>
     <p class="prompt">Pick your dinosaur:</p>
-    <div id="picker">
-      <button class="dino-choice" data-species="trex">
-        <div class="dino-preview trex-preview"></div>
-        <div class="dino-name">T-REX</div>
-        <div class="dino-desc">Fierce predator</div>
-      </button>
-      <button class="dino-choice" data-species="trike">
-        <div class="dino-preview trike-preview"></div>
-        <div class="dino-name">TRICERATOPS</div>
-        <div class="dino-desc">Mighty plant-eater</div>
-      </button>
-    </div>
+    <div id="picker"><!-- populated by main.js --></div>
   </div>
 
   <div id="stage-up" class="hidden">

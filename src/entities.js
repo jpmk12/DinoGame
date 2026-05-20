@@ -1,9 +1,6 @@
 import * as THREE from 'three';
-import {
-  buildTRex,
-  buildTriceratops,
-  buildCritter,
-} from './dinos.js';
+import { buildCritter, SPECIES, ALL_SPECIES } from './dinos.js';
+import { createDinoMeshSync } from './modelLoader.js';
 import { WORLD_SIZE } from './world.js';
 
 // Growth stages: index 0..4. Each stage has a base scale.
@@ -20,42 +17,46 @@ export const STAGE_THRESHOLD = [0, 6, 18, 40, 80];
 // Max growth in last stage (acts as visual cap for the bar)
 export const MAX_GROWTH = 130;
 
-export function buildPlayer(species) {
-  const dino =
-    species === 'trex' ? buildTRex(0x8b3a3a) : buildTriceratops(0x5a7a3a);
-  dino.userData.species = species;
+export function buildPlayer(speciesKey) {
+  const spec = SPECIES[speciesKey] || SPECIES.trex;
+  const dino = createDinoMeshSync(speciesKey);
+  dino.userData.species = speciesKey;
   dino.userData.kind = 'player';
   dino.userData.growth = 0;
   dino.userData.stage = 0;
   dino.userData.walkPhase = 0;
   dino.userData.chompTimer = 0;
+  dino.userData.speedMult = spec.speedMult || 1.0;
+  dino.userData.scaleMult = spec.scaleMult || 1.0;
   return dino;
 }
 
 /**
  * Make an enemy/food dino. Stage controls its size (0..4).
- * Type 'trex' or 'trike' for variety.
+ * speciesKey selects the dinosaur kind.
  */
-export function buildEnemyDino(type, stage) {
-  const colors = {
-    trex: [0x8b5a3a, 0x6a3a2a, 0x9a4a5a, 0x8b3a3a],
-    trike: [0x6a8a4a, 0x4a7a3a, 0x7a9a5a, 0x5a7a3a],
-  };
-  const c = colors[type][Math.floor(Math.random() * colors[type].length)];
-  const dino =
-    type === 'trex' ? buildTRex(c) : buildTriceratops(c);
+export function buildEnemyDino(speciesKey, stage) {
+  const spec = SPECIES[speciesKey];
+  if (!spec) throw new Error(`Unknown species: ${speciesKey}`);
+  const dino = createDinoMeshSync(speciesKey);
+  const scaleMult = spec.scaleMult || 1.0;
+  const effectiveScale = STAGE_SCALE[stage] * scaleMult;
   dino.userData.kind = 'enemy';
-  dino.userData.species = type;
+  dino.userData.species = speciesKey;
   dino.userData.stage = stage;
-  dino.userData.scale = STAGE_SCALE[stage];
-  dino.scale.setScalar(STAGE_SCALE[stage]);
+  dino.userData.scale = effectiveScale;
+  dino.scale.setScalar(effectiveScale);
+  // Pteranodons float a bit off the ground
+  if (speciesKey === 'ptero') {
+    dino.userData.flyHeight = 1.5 + Math.random() * 1.0;
+    dino.userData.flying = true;
+  }
   dino.userData.walkPhase = Math.random() * Math.PI * 2;
   dino.userData.wanderTimer = 0;
   dino.userData.wanderDir = new THREE.Vector3();
-  dino.userData.speed = 2 + stage * 0.6;
-  // Nutrition scales with size
+  dino.userData.speed = (2 + stage * 0.6) * (spec.speedMult || 1.0);
   dino.userData.nutrition = 2 + stage * 4;
-  dino.userData.size = STAGE_SCALE[stage] * 1.5;
+  dino.userData.size = effectiveScale * 1.5;
   return dino;
 }
 
@@ -82,31 +83,34 @@ export function buildCritterEnt() {
 }
 
 /**
- * Populate the world with critters + enemies.
+ * Populate the world with critters + enemies across all species.
  */
 export function populate(scene, playerPos) {
   const group = new THREE.Group();
   scene.add(group);
 
-  // ~ 25 critters
+  // Critters
   for (let i = 0; i < 25; i++) {
     const cr = buildCritterEnt();
     placeRandom(cr, playerPos);
     group.add(cr);
   }
 
-  // ~ 18 enemy dinos across all stages (so there's always something to chase you AND eat)
-  const mix = [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 0, 1, 2, 3];
-  for (const stage of mix) {
-    const type = Math.random() < 0.5 ? 'trex' : 'trike';
-    const d = buildEnemyDino(type, stage);
-    // Bigger enemies spawn farther from the player so kids aren't immediately swarmed
+  // Mix: enough at every stage to always have prey and predator nearby
+  const stageMix = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 0, 1, 2, 3];
+  for (const stage of stageMix) {
+    const speciesKey = pickRandomSpecies();
+    const d = buildEnemyDino(speciesKey, stage);
     const minDist = 14 + stage * 12;
     placeRandom(d, playerPos, minDist);
     group.add(d);
   }
 
   return group;
+}
+
+function pickRandomSpecies() {
+  return ALL_SPECIES[Math.floor(Math.random() * ALL_SPECIES.length)];
 }
 
 function placeRandom(obj, playerPos, minDist = 14) {
@@ -128,16 +132,13 @@ function placeRandom(obj, playerPos, minDist = 14) {
   );
 }
 
-// Spawn a single new enemy somewhere far from the player.
-// playerStage lets us bias toward dinos near the player's current size.
 export function spawnEnemy(group, playerPos, playerStage = 0) {
-  // Bias toward dinos within ±1 of player stage so there's always interesting prey/predator
   const stage = Math.max(
     0,
     Math.min(4, playerStage + (Math.floor(Math.random() * 3) - 1))
   );
-  const type = Math.random() < 0.5 ? 'trex' : 'trike';
-  const d = buildEnemyDino(type, stage);
+  const speciesKey = pickRandomSpecies();
+  const d = buildEnemyDino(speciesKey, stage);
   placeRandom(d, playerPos, 20 + stage * 6);
   group.add(d);
   return d;
