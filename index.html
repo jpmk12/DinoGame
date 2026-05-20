@@ -27,6 +27,15 @@
     <div id="stage-label">Hatchling</div>
     <div id="growth-bar"><div id="growth-fill"></div></div>
     <div id="score">Score: 0</div>
+    <div id="powerup-indicator" class="hidden">
+      <span id="powerup-icon"></span>
+      <span id="powerup-name"></span>
+      <span id="powerup-timer"></span>
+    </div>
+  </div>
+
+  <div id="fact-toast" class="hidden">
+    <div id="fact-text"></div>
   </div>
 
   <div id="touch-controls" class="hidden">
@@ -52,6 +61,13 @@
     <h2>You got eaten!</h2>
     <p>Don't worry, you respawn.</p>
     <button id="respawn-btn">Try again</button>
+  </div>
+
+  <div id="win-screen" class="hidden">
+    <h2>KING OF THE LOST WORLD!</h2>
+    <p class="win-sub">You reached the GIANT stage!</p>
+    <div id="win-score">Final Score: 0</div>
+    <button id="win-continue">Keep playing</button>
   </div>
 
   <div id="error-banner" class="hidden">

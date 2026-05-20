@@ -13,6 +13,15 @@ import {
 } from './entities.js';
 import { SPECIES, PLAYABLE_SPECIES } from './dinos.js';
 import { preloadAllModels, modelStatus } from './modelLoader.js';
+import { audio } from './audio.js';
+import { ParticleSystem } from './particles.js';
+import {
+  spawnBerries,
+  spawnBerry,
+  animateBerries,
+  POWERUP_TYPES,
+} from './powerups.js';
+import { factForSpecies, factForCritter, resetFacts } from './facts.js';
 
 // Tell the boot watchdog (defined in index.html) that the module loaded
 // successfully and all imports resolved.
@@ -65,13 +74,24 @@ resize();
 
 // ---------------- World ----------------
 const { plants } = buildWorld(scene);
+const particles = new ParticleSystem(scene);
 
 // ---------------- Game state ----------------
 const controls = new Controls();
 let player = null;
-let entities = null; // Group of enemies + critters
+let entities = null;     // Group of enemies + critters
+let berries = null;      // Group of power-up berries
 let score = 0;
 let gameRunning = false;
+let hasWon = false;      // win celebration only shows once per run
+let shake = 0;           // current screen-shake intensity
+let stepThumpTimer = 0;  // throttles giant-stage footstep sounds
+
+// Active power-up state on the player
+const power = {
+  active: null,    // 'speed' | 'growth' | 'apex' | null
+  timeLeft: 0,
+};
 
 // HUD elements
 const hudEl = document.getElementById('hud');
@@ -83,17 +103,28 @@ const stageUpEl = document.getElementById('stage-up');
 const stageUpNameEl = document.getElementById('stage-up-name');
 const gameOverEl = document.getElementById('game-over');
 const titleScreen = document.getElementById('title-screen');
+const powerupIndicator = document.getElementById('powerup-indicator');
+const powerupIcon = document.getElementById('powerup-icon');
+const powerupName = document.getElementById('powerup-name');
+const powerupTimer = document.getElementById('powerup-timer');
+const factToast = document.getElementById('fact-toast');
+const factText = document.getElementById('fact-text');
+const winScreen = document.getElementById('win-screen');
+const winScoreEl = document.getElementById('win-score');
 
 // ---------------- Start / restart ----------------
 function applyPlayerScale() {
   const stage = player.userData.stage;
   const sm = player.userData.scaleMult || 1.0;
-  player.scale.setScalar(STAGE_SCALE[stage] * sm);
+  const boost = power.active === 'growth' ? 1.15 : 1.0;
+  player.scale.setScalar(STAGE_SCALE[stage] * sm * boost);
 }
 
 function startGame(species) {
+  audio.unlock();
   if (player) scene.remove(player);
   if (entities) scene.remove(entities);
+  if (berries) scene.remove(berries);
 
   player = buildPlayer(species);
   player.position.set(0, 0, 0);
@@ -101,7 +132,13 @@ function startGame(species) {
   scene.add(player);
 
   entities = populate(scene, player.position);
+  berries = spawnBerries(scene, player.position, 5);
   score = 0;
+  hasWon = false;
+  power.active = null;
+  power.timeLeft = 0;
+  updatePowerupHUD();
+  resetFacts();
   gameRunning = true;
 
   updateHUD();
@@ -109,6 +146,7 @@ function startGame(species) {
   touchControls.classList.remove('hidden');
   titleScreen.classList.add('hidden');
   gameOverEl.classList.add('hidden');
+  winScreen.classList.add('hidden');
 }
 
 // Build the dino picker dynamically from the SPECIES registry.
@@ -135,10 +173,12 @@ buildPicker();
 if (window.__dinoBoot) window.__dinoBoot.stage = 'main-ran';
 
 document.getElementById('respawn-btn').addEventListener('click', () => {
+  audio.unlock();
   const species = player.userData.species;
   const lostStage = Math.max(0, player.userData.stage - 1);
   scene.remove(player);
   scene.remove(entities);
+  if (berries) scene.remove(berries);
   player = buildPlayer(species);
   player.userData.stage = lostStage;
   player.userData.growth = STAGE_THRESHOLD[lostStage];
@@ -146,9 +186,17 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   player.position.set(0, 0, 0);
   scene.add(player);
   entities = populate(scene, player.position);
+  berries = spawnBerries(scene, player.position, 5);
+  power.active = null;
+  power.timeLeft = 0;
+  updatePowerupHUD();
   gameRunning = true;
   updateHUD();
   gameOverEl.classList.add('hidden');
+});
+
+document.getElementById('win-continue').addEventListener('click', () => {
+  winScreen.classList.add('hidden');
 });
 
 // Preload any Quaternius GLB models present in /models/.
@@ -176,6 +224,55 @@ function updateHUD() {
   );
   growthFill.style.width = `${pct * 100}%`;
   scoreEl.textContent = `Score: ${score}`;
+}
+
+function updatePowerupHUD() {
+  if (!power.active) {
+    powerupIndicator.classList.add('hidden');
+    return;
+  }
+  const info = POWERUP_TYPES[power.active];
+  powerupIcon.textContent = info.icon;
+  powerupName.textContent = info.name;
+  powerupTimer.textContent = Math.ceil(power.timeLeft) + 's';
+  powerupIndicator.classList.remove('hidden');
+}
+
+function activatePowerup(type) {
+  power.active = type;
+  power.timeLeft = POWERUP_TYPES[type].duration;
+  audio.powerup();
+  particles.sparkles(player.position);
+  applyPlayerScale();
+  updatePowerupHUD();
+}
+
+let factToastTimer = null;
+function showFact(text) {
+  if (!text) return;
+  factText.textContent = text;
+  factToast.classList.remove('hidden');
+  // restart animation
+  factToast.style.animation = 'none';
+  void factToast.offsetWidth;
+  factToast.style.animation = '';
+  clearTimeout(factToastTimer);
+  factToastTimer = setTimeout(() => {
+    factToast.classList.add('hidden');
+  }, 4000);
+}
+
+function triggerWin() {
+  if (hasWon) return;
+  hasWon = true;
+  winScoreEl.textContent = 'Final Score: ' + score;
+  winScreen.classList.remove('hidden');
+  audio.win();
+  // Big confetti burst above the player
+  const pos = player.position.clone();
+  pos.y += 4;
+  particles.confetti(pos);
+  shake = Math.max(shake, 0.4);
 }
 
 function showStageUp(stage) {
@@ -261,18 +358,38 @@ function frame() {
   if (gameRunning) {
     updatePlayer(dt);
     updateEntities(dt);
+    if (berries) animateBerries(berries, dt);
+    updatePowerup(dt);
     handleEating(dt);
     updateCamera(dt);
   }
+  particles.update(dt);
+
+  // Decay screen shake
+  if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 
+function updatePowerup(dt) {
+  if (!power.active) return;
+  power.timeLeft -= dt;
+  if (power.timeLeft <= 0) {
+    audio.powerupExpire();
+    const wasGrowth = power.active === 'growth';
+    power.active = null;
+    power.timeLeft = 0;
+    if (wasGrowth) applyPlayerScale();
+  }
+  updatePowerupHUD();
+}
+
 function updatePlayer(dt) {
   const stage = player.userData.stage;
   const speedMult = player.userData.speedMult || 1.0;
-  const baseSpeed = (4 + stage * 0.8) * speedMult;
+  const powerSpeed = power.active === 'speed' ? 2.0 : 1.0;
+  const baseSpeed = (4 + stage * 0.8) * speedMult * powerSpeed;
   const mv = controls.move;
   const speed = Math.hypot(mv.x, mv.y);
   let moving = false;
@@ -295,6 +412,18 @@ function updatePlayer(dt) {
   player.position.z = Math.max(-limit, Math.min(limit, player.position.z));
 
   animateDino(player, dt, moving);
+
+  // Giant-stage footsteps: thump sound + dust + tiny camera shake
+  if (moving && stage >= 3) {
+    stepThumpTimer -= dt;
+    if (stepThumpTimer <= 0) {
+      const interval = stage >= 4 ? 0.5 : 0.65;
+      stepThumpTimer = interval;
+      audio.step();
+      particles.dust(player.position);
+      if (stage >= 4) shake = Math.max(shake, 0.12);
+    }
+  }
 
   // Chomp animation
   if (controls.chompPressed) {
@@ -409,20 +538,37 @@ function handleEating(dt) {
   const stage = player.userData.stage;
   const playerScale = STAGE_SCALE[stage] * (player.userData.scaleMult || 1.0);
   const playerSize = playerScale * 1.5;
-  // Auto-eat when collision happens; chomp button just plays animation
-  // and gives a small bonus (we use it to extend reach slightly)
   const reachBoost = player.userData.chompTimer > 0 ? 1.5 : 1.0;
+  const growthMult = power.active === 'growth' ? 2.0 : 1.0;
+  const apex = power.active === 'apex';
 
   // Plants
   for (let i = plants.children.length - 1; i >= 0; i--) {
     const p = plants.children[i];
     const d = p.position.distanceTo(player.position);
     if (d < (playerSize + p.userData.size) * 0.7 * reachBoost) {
+      particles.leaves(p.position);
+      audio.chompPlant();
       plants.remove(p);
-      addGrowth(p.userData.nutrition);
+      addGrowth(p.userData.nutrition * growthMult);
       score += 1;
-      // respawn a plant elsewhere
       spawnPlantRandom(plants);
+    }
+  }
+
+  // Berries (power-ups)
+  if (berries) {
+    for (let i = berries.children.length - 1; i >= 0; i--) {
+      const b = berries.children[i];
+      const d = b.position.distanceTo(player.position);
+      if (d < playerSize + 0.6) {
+        activatePowerup(b.userData.berryType);
+        berries.remove(b);
+        // Respawn a new berry elsewhere after a delay
+        setTimeout(() => {
+          if (gameRunning && berries) spawnBerry(berries, player.position);
+        }, 6000);
+      }
     }
   }
 
@@ -435,22 +581,30 @@ function handleEating(dt) {
     if (!touching) continue;
 
     if (ent.userData.kind === 'critter') {
-      // Always edible
+      particles.meat(ent.position);
+      audio.chompCritter();
       entities.remove(ent);
-      addGrowth(ent.userData.nutrition);
+      addGrowth(ent.userData.nutrition * growthMult);
       score += 3;
-      // Replace with a fresh one
+      showFact(factForCritter());
       spawnCritter(entities, player.position);
     } else if (ent.userData.kind === 'enemy') {
       const enemyScale = ent.userData.scale;
-      if (playerScale >= enemyScale * 0.95) {
-        // Eat it!
+      const canEat = apex || playerScale >= enemyScale * 0.95;
+      if (canEat) {
+        particles.meat(ent.position);
+        // Sound depends on the enemy's size
+        if (ent.userData.stage >= 3) audio.chompBig();
+        else audio.chompCritter();
+        // Show fact the first time we eat this species
+        showFact(factForSpecies(ent.userData.species));
         entities.remove(ent);
-        addGrowth(ent.userData.nutrition);
+        addGrowth(ent.userData.nutrition * growthMult);
         score += 10 + ent.userData.stage * 5;
+        // Camera shake scales with prey size
+        shake = Math.max(shake, 0.1 + ent.userData.stage * 0.05);
         spawnEnemy(entities, player.position, player.userData.stage);
       } else {
-        // You get eaten
         gameOver();
         return;
       }
@@ -471,12 +625,24 @@ function addGrowth(amount) {
     player.userData.stage += 1;
     applyPlayerScale();
     showStageUp(player.userData.stage);
+    audio.stageUp();
+    const pos = player.position.clone();
+    pos.y += 1;
+    particles.sparkles(pos);
+    shake = Math.max(shake, 0.25);
+    if (player.userData.stage === 4) {
+      // Reaching GIANT triggers the celebration once per run
+      triggerWin();
+    }
   }
   updateHUD();
 }
 
 function gameOver() {
   gameRunning = false;
+  audio.gameOver();
+  particles.meat(player.position);
+  shake = 0.35;
   gameOverEl.classList.remove('hidden');
 }
 
@@ -492,6 +658,11 @@ function updateCamera(dt) {
   camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 4);
   camera.position.y += (targetY - camera.position.y) * Math.min(1, dt * 4);
   camera.position.z += (targetZ - camera.position.z) * Math.min(1, dt * 4);
+  // Screen shake offset (decays in frame())
+  if (shake > 0) {
+    camera.position.x += (Math.random() - 0.5) * shake;
+    camera.position.y += (Math.random() - 0.5) * shake * 0.5;
+  }
   camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
 
   // Sun follows player so shadow map stays around the action
