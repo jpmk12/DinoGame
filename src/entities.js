@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildCritter, SPECIES, ALL_SPECIES } from './dinos.js';
 import { createDinoMeshSync } from './modelLoader.js';
-import { WORLD_SIZE } from './world.js';
+import { WORLD_SIZE, getHeightAt } from './world.js';
 
 // Growth stages: index 0..4. Each stage has a base scale.
 export const STAGE_NAMES = [
@@ -120,16 +120,14 @@ function placeRandom(obj, playerPos, minDist = 14) {
     const dx = x - playerPos.x;
     const dz = z - playerPos.z;
     if (Math.hypot(dx, dz) > minDist) {
-      obj.position.set(x, 0, z);
+      obj.position.set(x, getHeightAt(x, z), z);
       obj.rotation.y = Math.random() * Math.PI * 2;
       return;
     }
   }
-  obj.position.set(
-    (Math.random() - 0.5) * WORLD_SIZE * 1.7,
-    0,
-    (Math.random() - 0.5) * WORLD_SIZE * 1.7
-  );
+  const x = (Math.random() - 0.5) * WORLD_SIZE * 1.7;
+  const z = (Math.random() - 0.5) * WORLD_SIZE * 1.7;
+  obj.position.set(x, getHeightAt(x, z), z);
 }
 
 export function spawnEnemy(group, playerPos, playerStage = 0) {

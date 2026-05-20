@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD_SIZE } from './world.js';
+import { WORLD_SIZE, getHeightAt } from './world.js';
 
 // Glowing berries with three flavors. Each grants a temporary buff.
 
@@ -89,15 +89,13 @@ function placeRandom(obj, playerPos, minDist = 14) {
     const x = (Math.random() - 0.5) * WORLD_SIZE * 1.7;
     const z = (Math.random() - 0.5) * WORLD_SIZE * 1.7;
     if (Math.hypot(x - playerPos.x, z - playerPos.z) > minDist) {
-      obj.position.set(x, 0, z);
+      obj.position.set(x, getHeightAt(x, z), z);
       return;
     }
   }
-  obj.position.set(
-    (Math.random() - 0.5) * WORLD_SIZE * 1.7,
-    0,
-    (Math.random() - 0.5) * WORLD_SIZE * 1.7
-  );
+  const x = (Math.random() - 0.5) * WORLD_SIZE * 1.7;
+  const z = (Math.random() - 0.5) * WORLD_SIZE * 1.7;
+  obj.position.set(x, getHeightAt(x, z), z);
 }
 
 export function spawnBerries(scene, playerPos, count = 5) {

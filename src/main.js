@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { Controls } from './controls.js';
-import { buildWorld, WORLD_SIZE, spawnPlantRandom } from './world.js';
+import {
+  buildWorld,
+  WORLD_SIZE,
+  spawnPlantRandom,
+  getHeightAt,
+  animateClouds,
+} from './world.js';
 import {
   buildPlayer,
   populate,
@@ -44,33 +50,75 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 40, 110);
+// Warm tinted exponential fog — sky color matches the horizon for a soft blend.
+scene.fog = new THREE.FogExp2(0xeac49a, 0.011);
 
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 300);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
 camera.position.set(0, 8, 12);
 
-// Lights
-const ambient = new THREE.AmbientLight(0xffffff, 0.55);
-scene.add(ambient);
-const sun = new THREE.DirectionalLight(0xfff4d6, 0.9);
-sun.position.set(30, 50, 20);
+// ----- Lighting -----
+// Hemisphere fills shadows with sky/ground tones (much more natural than flat ambient).
+const hemi = new THREE.HemisphereLight(0xb0d4f0, 0x4a5a30, 0.65);
+scene.add(hemi);
+
+// Warm directional sun — golden-hour vibe.
+const sun = new THREE.DirectionalLight(0xfff1cf, 1.15);
+sun.position.set(30, 60, 20);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.left = -40;
-sun.shadow.camera.right = 40;
-sun.shadow.camera.top = 40;
-sun.shadow.camera.bottom = -40;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -45;
+sun.shadow.camera.right = 45;
+sun.shadow.camera.top = 45;
+sun.shadow.camera.bottom = -45;
 sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 120;
+sun.shadow.camera.far = 160;
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.02;
 scene.add(sun);
 
-// Sun follow target so shadows track player
+// Cool rim/back light from the opposite side. Just barely there, but it
+// puts a hint of separation around silhouettes against the ground.
+const rim = new THREE.DirectionalLight(0xa8c8ff, 0.35);
+rim.position.set(-40, 40, -30);
+scene.add(rim);
+
 const sunTarget = new THREE.Object3D();
 scene.add(sunTarget);
 sun.target = sunTarget;
+
+// ---------------- Post-processing (bloom) ----------------
+// Lazy-loaded; if the CDN modules fail we silently fall back to direct
+// rendering with no glow. Game still works.
+let composer = null;
+let bloomPass = null;
+(async () => {
+  try {
+    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] =
+      await Promise.all([
+        import('three/addons/postprocessing/EffectComposer.js'),
+        import('three/addons/postprocessing/RenderPass.js'),
+        import('three/addons/postprocessing/UnrealBloomPass.js'),
+        import('three/addons/postprocessing/OutputPass.js'),
+      ]);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    composer = new EffectComposer(renderer);
+    composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    composer.setSize(w, h);
+    composer.addPass(new RenderPass(scene, camera));
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.45, 0.78);
+    composer.addPass(bloomPass);
+    composer.addPass(new OutputPass());
+  } catch (err) {
+    console.warn('[DinoGrow] Bloom unavailable, falling back to plain render:', err);
+    composer = null;
+  }
+})();
 
 // ---------------- Resize ----------------
 function resize() {
@@ -79,12 +127,16 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  if (composer) {
+    composer.setSize(w, h);
+    if (bloomPass) bloomPass.setSize(w, h);
+  }
 }
 window.addEventListener('resize', resize);
 resize();
 
 // ---------------- World ----------------
-const { plants } = buildWorld(scene);
+const { plants, clouds } = buildWorld(scene);
 const particles = new ParticleSystem(scene);
 
 // ---------------- Game state ----------------
@@ -146,7 +198,7 @@ function startGame(species) {
   removeAllBabies();
 
   player = buildPlayer(species);
-  player.position.set(0, 0, 0);
+  player.position.set(0, getHeightAt(0, 0), 0);
   applyPlayerScale();
   scene.add(player);
 
@@ -212,7 +264,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   player.userData.stage = lostStage;
   player.userData.growth = STAGE_THRESHOLD[lostStage];
   applyPlayerScale();
-  player.position.set(0, 0, 0);
+  player.position.set(0, getHeightAt(0, 0), 0);
   scene.add(player);
   entities = populate(scene, player.position);
   berries = spawnBerries(scene, player.position, 5);
@@ -494,17 +546,19 @@ function showStageUp(stage) {
 
 // ---------------- Animation helpers ----------------
 function animateDino(d, dt, moving) {
+  const groundY = getHeightAt(d.position.x, d.position.z);
   const parts = d.userData.parts;
   // GLB models don't have procedural parts — do a whole-body bob instead.
   if (!parts || Object.keys(parts).length === 0) {
     d.userData.walkPhase = (d.userData.walkPhase || 0) + dt * (moving ? 8 : 2);
     if (d.userData.flying) {
       const base = d.userData.flyHeight || 1.5;
-      d.position.y = base + Math.sin(d.userData.walkPhase * 1.2) * 0.25;
+      d.position.y = groundY + base + Math.sin(d.userData.walkPhase * 1.2) * 0.25;
     } else {
-      d.position.y = moving
+      const bob = moving
         ? Math.abs(Math.sin(d.userData.walkPhase * 1.5)) * 0.08
         : 0;
+      d.position.y = groundY + bob;
     }
     return;
   }
@@ -518,7 +572,7 @@ function animateDino(d, dt, moving) {
     if (parts.wingL) parts.wingL.rotation.z = 0.15 + Math.sin(ph * 1.5) * 0.4;
     if (parts.wingR) parts.wingR.rotation.z = -0.15 - Math.sin(ph * 1.5) * 0.4;
     const base = d.userData.flyHeight || 1.5;
-    d.position.y = base + Math.sin(ph * 1.2) * 0.25;
+    d.position.y = groundY + base + Math.sin(ph * 1.2) * 0.25;
     if (parts.tail2) parts.tail2.rotation.x = Math.sin(ph * 0.5) * 0.1;
     return;
   }
@@ -534,12 +588,9 @@ function animateDino(d, dt, moving) {
     parts.head.position.y =
       (parts.head.userData.baseY ??= parts.head.position.y) +
       Math.sin(ph * 0.8) * 0.03;
-  // Subtle body bob
-  if (moving) {
-    d.position.y = Math.abs(Math.sin(ph * 2)) * 0.04;
-  } else {
-    d.position.y *= 0.9;
-  }
+  // Body sits on terrain plus subtle bob
+  const bob = moving ? Math.abs(Math.sin(ph * 2)) * 0.04 : 0;
+  d.position.y = groundY + bob;
 }
 
 function chompAnim(d, t) {
@@ -575,7 +626,11 @@ function frame() {
   // Decay screen shake
   if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
 
-  renderer.render(scene, camera);
+  // Drift the clouds across the sky
+  if (clouds) animateClouds(clouds, dt);
+
+  if (composer) composer.render();
+  else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 
@@ -854,14 +909,14 @@ function gameOver() {
 }
 
 function updateCamera(dt) {
-  // Chase cam: behind and above the player
+  // Chase cam: behind and above the player. Height tracks terrain so the
+  // camera stays the right distance off the ground when on hills or valleys.
   const stage = player.userData.stage;
   const heightOffset = 8 + stage * 1.5;
   const backOffset = 10 + stage * 2;
-  // Camera looks in -Z by default; just place it behind and above
   const targetX = player.position.x;
   const targetZ = player.position.z + backOffset;
-  const targetY = heightOffset;
+  const targetY = player.position.y + heightOffset;
   camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 4);
   camera.position.y += (targetY - camera.position.y) * Math.min(1, dt * 4);
   camera.position.z += (targetZ - camera.position.z) * Math.min(1, dt * 4);
