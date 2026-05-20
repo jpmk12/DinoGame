@@ -9,6 +9,8 @@
 <title>DinoGrow</title>
 <link rel="stylesheet" href="style.css" />
 <link rel="apple-touch-icon" href="icon.svg" />
+<!-- Polyfill: makes import maps + bare specifiers work on older iOS Safari (<16.4) -->
+<script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -51,6 +53,33 @@
     <p>Don't worry, you respawn.</p>
     <button id="respawn-btn">Try again</button>
   </div>
+
+  <div id="error-banner" class="hidden">
+    <strong>Error</strong>
+    <pre id="error-text"></pre>
+  </div>
+
+  <script>
+    // Catch errors before the module even runs so they're visible on-screen
+    // (no devtools on a phone). Visible during startup; gameplay errors logged too.
+    (function () {
+      const show = (msg) => {
+        const b = document.getElementById('error-banner');
+        const t = document.getElementById('error-text');
+        if (b && t) {
+          t.textContent = msg;
+          b.classList.remove('hidden');
+        }
+      };
+      window.addEventListener('error', (e) => {
+        show((e.message || 'Unknown error') + '\n' + (e.filename || '') +
+             (e.lineno ? ':' + e.lineno : ''));
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        show('Promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+      });
+    })();
+  </script>
 
   <script type="module" src="src/main.js"></script>
 </body>

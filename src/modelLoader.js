@@ -1,12 +1,26 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SPECIES } from './dinos.js';
 
 // Loads Quaternius (or any) .glb models from /models/, with a graceful
 // fallback to the procedural builder if the file is missing.
 // Models are loaded once and cloned per instance.
+//
+// IMPORTANT: GLTFLoader is loaded dynamically the first time we need it,
+// so a CDN issue with the loader cannot break the rest of the game.
 
-const loader = new GLTFLoader();
+let loaderPromise = null;
+function getLoader() {
+  if (!loaderPromise) {
+    loaderPromise = import('three/addons/loaders/GLTFLoader.js')
+      .then((mod) => new mod.GLTFLoader())
+      .catch((err) => {
+        console.warn('[DinoGrow] GLTFLoader unavailable, using procedural only:', err);
+        return null;
+      });
+  }
+  return loaderPromise;
+}
+
 const modelCache = new Map();      // species -> THREE.Group (loaded GLB scene)
 const modelMissing = new Set();    // species we've already 404'd on (don't retry)
 const pendingLoads = new Map();    // species -> Promise
@@ -15,10 +29,21 @@ const MODELS_BASE = './models/';
 const TARGET_LENGTH = 2.0; // normalize all dinos to ~2 units long at scale 1.0
 
 /**
- * Eagerly preload all species' GLB models if present, in parallel.
- * Always resolves — missing files just get marked and fall back to procedural.
+ * Try to preload models from /models/. Always resolves; never throws.
+ * If a probe HEAD request 404s, we skip ever trying to load.
  */
-export function preloadAllModels() {
+export async function preloadAllModels() {
+  // Cheap probe: HEAD-check one expected file. If it's a 404, skip loading
+  // entirely — the user hasn't dropped any Quaternius models in.
+  let anyExist = false;
+  try {
+    const probe = await fetch(MODELS_BASE + SPECIES.trex.modelFile, { method: 'HEAD' });
+    anyExist = probe.ok;
+  } catch (_) {
+    anyExist = false;
+  }
+  if (!anyExist) return [];
+
   const promises = [];
   for (const key of Object.keys(SPECIES)) {
     promises.push(tryLoadModel(key));
@@ -26,35 +51,41 @@ export function preloadAllModels() {
   return Promise.allSettled(promises);
 }
 
-function tryLoadModel(speciesKey) {
-  if (modelCache.has(speciesKey)) return Promise.resolve(modelCache.get(speciesKey));
-  if (modelMissing.has(speciesKey)) return Promise.resolve(null);
+async function tryLoadModel(speciesKey) {
+  if (modelCache.has(speciesKey)) return modelCache.get(speciesKey);
+  if (modelMissing.has(speciesKey)) return null;
   if (pendingLoads.has(speciesKey)) return pendingLoads.get(speciesKey);
 
   const spec = SPECIES[speciesKey];
   if (!spec || !spec.modelFile) {
     modelMissing.add(speciesKey);
-    return Promise.resolve(null);
+    return null;
   }
 
   const url = MODELS_BASE + spec.modelFile;
-  const p = new Promise((resolve) => {
-    loader.load(
-      url,
-      (gltf) => {
-        const root = gltf.scene;
-        normalizeModel(root, spec);
-        modelCache.set(speciesKey, root);
-        resolve(root);
-      },
-      undefined,
-      (err) => {
-        // 404 or other — silent fallback to procedural
-        modelMissing.add(speciesKey);
-        resolve(null);
-      }
-    );
-  });
+  const p = (async () => {
+    const loader = await getLoader();
+    if (!loader) {
+      modelMissing.add(speciesKey);
+      return null;
+    }
+    return new Promise((resolve) => {
+      loader.load(
+        url,
+        (gltf) => {
+          const root = gltf.scene;
+          normalizeModel(root, spec);
+          modelCache.set(speciesKey, root);
+          resolve(root);
+        },
+        undefined,
+        () => {
+          modelMissing.add(speciesKey);
+          resolve(null);
+        }
+      );
+    });
+  })();
   pendingLoads.set(speciesKey, p);
   return p;
 }
