@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <rect width="180" height="180" rx="36" fill="#5fae5c"/>
+  <!-- Simple dino silhouette -->
+  <g fill="#2a5a3a">
+    <path d="M40 130 L40 95 Q40 70 60 65 L78 60 L82 40 Q85 28 100 30 Q113 32 115 45 L114 60 L130 65 Q145 70 145 90 L145 115 L155 115 L155 130 L130 130 L130 115 L120 115 L120 130 L100 130 L100 115 L80 115 L80 130 Z"/>
+    <circle cx="100" cy="48" r="4" fill="#fff"/>
+  </g>
+  <!-- Sun -->
+  <circle cx="40" cy="40" r="14" fill="#ffd24a"/>
+</svg>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#1a3d2e" />
+<title>DinoGrow</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="stage-label">Hatchling</div>
+    <div id="growth-bar"><div id="growth-fill"></div></div>
+    <div id="score">Score: 0</div>
+  </div>
+
+  <div id="touch-controls" class="hidden">
+    <div id="joystick">
+      <div id="joystick-knob"></div>
+    </div>
+    <button id="chomp-btn">CHOMP</button>
+  </div>
+
+  <div id="title-screen">
+    <h1>DinoGrow</h1>
+    <p class="subtitle">Eat. Grow. Become a giant!</p>
+    <p class="prompt">Pick your dinosaur:</p>
+    <div id="picker">
+      <button class="dino-choice" data-species="trex">
+        <div class="dino-preview trex-preview"></div>
+        <div class="dino-name">T-REX</div>
+        <div class="dino-desc">Fierce predator</div>
+      </button>
+      <button class="dino-choice" data-species="trike">
+        <div class="dino-preview trike-preview"></div>
+        <div class="dino-name">TRICERATOPS</div>
+        <div class="dino-desc">Mighty plant-eater</div>
+      </button>
+    </div>
+  </div>
+
+  <div id="stage-up" class="hidden">
+    <div id="stage-up-text">Stage Up!</div>
+    <div id="stage-up-name">Juvenile</div>
+  </div>
+
+  <div id="game-over" class="hidden">
+    <h2>You got eaten!</h2>
+    <p>Don't worry, you respawn.</p>
+    <button id="respawn-btn">Try again</button>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
