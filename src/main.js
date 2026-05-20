@@ -22,6 +22,17 @@ import {
   POWERUP_TYPES,
 } from './powerups.js';
 import { factForSpecies, factForCritter, resetFacts } from './facts.js';
+import {
+  spawnEggs,
+  spawnEgg,
+  animateEggs,
+  eggNearby,
+  tapEgg,
+  buildBabyDino,
+  EGG_TAPS_TO_HATCH,
+  BABY_DURATION,
+  BABY_EAT_RADIUS,
+} from './eggs.js';
 
 // Tell the boot watchdog (defined in index.html) that the module loaded
 // successfully and all imports resolved.
@@ -81,6 +92,8 @@ const controls = new Controls();
 let player = null;
 let entities = null;     // Group of enemies + critters
 let berries = null;      // Group of power-up berries
+let eggs = null;         // Group of egg nests
+let babies = [];         // active baby dinos (THREE.Group instances)
 let score = 0;
 let gameRunning = false;
 let hasWon = false;      // win celebration only shows once per run
@@ -111,6 +124,10 @@ const factToast = document.getElementById('fact-toast');
 const factText = document.getElementById('fact-text');
 const winScreen = document.getElementById('win-screen');
 const winScoreEl = document.getElementById('win-score');
+const babyIndicator = document.getElementById('baby-indicator');
+const babyTimerEl = document.getElementById('baby-timer');
+const eggPrompt = document.getElementById('egg-prompt');
+const eggProgressFill = document.getElementById('egg-progress-fill');
 
 // ---------------- Start / restart ----------------
 function applyPlayerScale() {
@@ -125,6 +142,8 @@ function startGame(species) {
   if (player) scene.remove(player);
   if (entities) scene.remove(entities);
   if (berries) scene.remove(berries);
+  if (eggs) scene.remove(eggs);
+  removeAllBabies();
 
   player = buildPlayer(species);
   player.position.set(0, 0, 0);
@@ -133,11 +152,14 @@ function startGame(species) {
 
   entities = populate(scene, player.position);
   berries = spawnBerries(scene, player.position, 5);
+  eggs = spawnEggs(scene, player.position, 4);
   score = 0;
   hasWon = false;
   power.active = null;
   power.timeLeft = 0;
   updatePowerupHUD();
+  hideBabyIndicator();
+  hideEggPrompt();
   resetFacts();
   gameRunning = true;
 
@@ -147,6 +169,11 @@ function startGame(species) {
   titleScreen.classList.add('hidden');
   gameOverEl.classList.add('hidden');
   winScreen.classList.add('hidden');
+}
+
+function removeAllBabies() {
+  for (const b of babies) scene.remove(b);
+  babies = [];
 }
 
 // Build the dino picker dynamically from the SPECIES registry.
@@ -179,6 +206,8 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   scene.remove(player);
   scene.remove(entities);
   if (berries) scene.remove(berries);
+  if (eggs) scene.remove(eggs);
+  removeAllBabies();
   player = buildPlayer(species);
   player.userData.stage = lostStage;
   player.userData.growth = STAGE_THRESHOLD[lostStage];
@@ -187,9 +216,12 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   scene.add(player);
   entities = populate(scene, player.position);
   berries = spawnBerries(scene, player.position, 5);
+  eggs = spawnEggs(scene, player.position, 4);
   power.active = null;
   power.timeLeft = 0;
   updatePowerupHUD();
+  hideBabyIndicator();
+  hideEggPrompt();
   gameRunning = true;
   updateHUD();
   gameOverEl.classList.add('hidden');
@@ -275,6 +307,178 @@ function triggerWin() {
   shake = Math.max(shake, 0.4);
 }
 
+// ---------------- Egg / baby helpers ----------------
+function showEggPrompt(cracks) {
+  eggPrompt.classList.remove('hidden');
+  const pct = (cracks / EGG_TAPS_TO_HATCH) * 100;
+  eggProgressFill.style.width = pct + '%';
+}
+
+function hideEggPrompt() {
+  eggPrompt.classList.add('hidden');
+  eggProgressFill.style.width = '0%';
+}
+
+function showBabyIndicator(timeLeft) {
+  babyIndicator.classList.remove('hidden');
+  babyTimerEl.textContent = Math.ceil(timeLeft) + 's';
+}
+
+function hideBabyIndicator() {
+  babyIndicator.classList.add('hidden');
+}
+
+function hatchEgg(eggRoot) {
+  const pos = eggRoot.position.clone();
+  pos.y += 0.6;
+  particles.sparkles(pos);
+  particles.confetti(pos);
+  audio.eggHatch();
+  shake = Math.max(shake, 0.2);
+  score += 15;
+  showFact('A baby hatched! It will help you eat for ' + BABY_DURATION + ' seconds!');
+
+  // Spawn the baby — same species as the player for a "your baby" feel
+  const baby = buildBabyDino(player.userData.species);
+  baby.position.copy(eggRoot.position);
+  scene.add(baby);
+  babies.push(baby);
+
+  // Remove the egg, queue a respawn elsewhere
+  if (eggs) {
+    eggs.remove(eggRoot);
+    setTimeout(() => {
+      if (gameRunning && eggs) spawnEgg(eggs, player.position);
+    }, 10000);
+  }
+}
+
+const _babyTmp = new THREE.Vector3();
+
+function updateBabies(dt) {
+  if (babies.length === 0) {
+    hideBabyIndicator();
+    return;
+  }
+
+  // Show indicator with the longest-lived baby's remaining time
+  let maxLife = 0;
+  for (const b of babies) maxLife = Math.max(maxLife, b.userData.lifetime);
+  showBabyIndicator(maxLife);
+
+  for (let i = babies.length - 1; i >= 0; i--) {
+    const baby = babies[i];
+    baby.userData.lifetime -= dt;
+    if (baby.userData.lifetime <= 0) {
+      // Goodbye animation: sparkle and remove
+      particles.sparkles(baby.position);
+      scene.remove(baby);
+      babies.splice(i, 1);
+      continue;
+    }
+
+    // Find the nearest small food (plant or critter) within 6 units
+    let target = null;
+    let targetDist = 6;
+    let targetGroup = null;
+
+    if (plants) {
+      for (const p of plants.children) {
+        const d = baby.position.distanceTo(p.position);
+        if (d < targetDist) {
+          target = p;
+          targetDist = d;
+          targetGroup = plants;
+        }
+      }
+    }
+    if (entities) {
+      for (const ent of entities.children) {
+        if (ent.userData.kind !== 'critter') continue;
+        const d = baby.position.distanceTo(ent.position);
+        if (d < targetDist) {
+          target = ent;
+          targetDist = d;
+          targetGroup = entities;
+        }
+      }
+    }
+
+    // Choose goal: target food, else trail the player at an offset
+    let goalX, goalZ;
+    if (target) {
+      goalX = target.position.x;
+      goalZ = target.position.z;
+    } else {
+      const ang = baby.userData.followAngle;
+      const offset = 1.8;
+      goalX = player.position.x + Math.cos(ang) * offset;
+      goalZ = player.position.z + Math.sin(ang) * offset;
+    }
+
+    // Move toward goal
+    const dx = goalX - baby.position.x;
+    const dz = goalZ - baby.position.z;
+    const dist = Math.hypot(dx, dz);
+    const speed = target ? 6 : 5;
+    let moving = false;
+    if (dist > 0.05) {
+      const step = Math.min(dist, speed * dt);
+      baby.position.x += (dx / dist) * step;
+      baby.position.z += (dz / dist) * step;
+      const yaw = Math.atan2(-(dx / dist), -(dz / dist));
+      baby.rotation.y = yaw;
+      moving = true;
+    }
+    animateDino(baby, dt, moving);
+
+    // Eat if close enough
+    if (target && targetDist < BABY_EAT_RADIUS) {
+      const wasPlant = target.userData.kind === 'plant';
+      const nutrition = target.userData.nutrition || 1;
+      particles[wasPlant ? 'leaves' : 'meat'](target.position);
+      audio.chompPlant();
+      targetGroup.remove(target);
+      // Award the player — slightly less than eating it yourself
+      addGrowth(nutrition);
+      score += wasPlant ? 1 : 2;
+      // Replenish what was eaten so the world stays populated
+      if (wasPlant) spawnPlantRandom(plants);
+      else spawnCritter(entities, player.position);
+    }
+
+    // Occasional chirp
+    baby.userData.chirpTimer -= dt;
+    if (baby.userData.chirpTimer <= 0) {
+      audio.babyChirp();
+      baby.userData.chirpTimer = 4 + Math.random() * 5;
+    }
+  }
+}
+
+function handleEggInteraction() {
+  if (!eggs) {
+    hideEggPrompt();
+    return;
+  }
+  const near = eggNearby(eggs, player.position);
+  if (!near) {
+    hideEggPrompt();
+    return;
+  }
+  showEggPrompt(near.userData.cracks);
+  if (controls.chompPressed) {
+    audio.eggCrack();
+    particles.dust(near.position);
+    const hatched = tapEgg(near);
+    showEggPrompt(near.userData.cracks);
+    if (hatched) {
+      hatchEgg(near);
+      hideEggPrompt();
+    }
+  }
+}
+
 function showStageUp(stage) {
   stageUpNameEl.textContent = STAGE_NAMES[stage];
   stageUpEl.classList.remove('hidden');
@@ -358,8 +562,11 @@ function frame() {
   if (gameRunning) {
     updatePlayer(dt);
     updateEntities(dt);
+    updateBabies(dt);
     if (berries) animateBerries(berries, dt);
+    if (eggs) animateEggs(eggs, dt);
     updatePowerup(dt);
+    handleEggInteraction();
     handleEating(dt);
     updateCamera(dt);
   }

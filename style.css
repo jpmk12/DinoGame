@@ -346,6 +346,79 @@ html, body {
   to   { box-shadow: 0 0 14px rgba(255, 210, 74, 0.95); }
 }
 
+/* ---------- Baby indicator ---------- */
+#baby-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid #ffaadd;
+  border-radius: 16px;
+  padding: 6px 12px;
+  font-weight: 800;
+  font-size: 14px;
+  color: #ffd6ec;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.baby-icon {
+  font-size: 18px;
+}
+
+#baby-timer {
+  background: rgba(255, 170, 221, 0.25);
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Egg hatch prompt ---------- */
+#egg-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 200px);
+  transform: translateX(-50%);
+  z-index: 25;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: eggPromptBob 0.6s ease-in-out infinite alternate;
+}
+
+#egg-progress {
+  width: 180px;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 3px solid #fff4d0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#egg-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #fff4d0, #ffd24a);
+  transition: width 0.15s ease-out;
+}
+
+.egg-prompt-text {
+  font-size: 16px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 2px 2px 0 #6a4a2a, 0 0 8px rgba(255, 232, 154, 0.8);
+  letter-spacing: 1px;
+  background: rgba(106, 74, 42, 0.7);
+  padding: 4px 12px;
+  border-radius: 10px;
+}
+
+@keyframes eggPromptBob {
+  from { transform: translate(-50%, 0); }
+  to   { transform: translate(-50%, -6px); }
+}
+
 /* ---------- Fact toast ---------- */
 #fact-toast {
   position: fixed;

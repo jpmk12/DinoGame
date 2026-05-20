@@ -143,6 +143,27 @@ class AudioManager {
     // Subtle thump for giant-stage footsteps
     this._noise(0.08, 0.18, 200);
   }
+
+  eggCrack() {
+    // Sharp short tick + tiny noise burst
+    this._noise(0.06, 0.22, 3000, 'highpass');
+    this._tone(800, 0.05, 'square', 0.12, 0.6);
+  }
+
+  eggHatch() {
+    // Triumphant little flourish: pop + ascending chirp
+    this._noise(0.1, 0.25, 1500);
+    setTimeout(() => this._tone(700, 0.1, 'triangle', 0.2, 1.8), 60);
+    setTimeout(() => this._tone(1100, 0.15, 'triangle', 0.22, 1.5), 160);
+    setTimeout(() => this._tone(1500, 0.2, 'triangle', 0.24, 1.4), 280);
+  }
+
+  babyChirp() {
+    // High-pitched short blip
+    const base = 1200 + Math.random() * 400;
+    this._tone(base, 0.07, 'triangle', 0.13, 1.6);
+    setTimeout(() => this._tone(base * 1.4, 0.05, 'triangle', 0.1), 70);
+  }
 }
 
 export const audio = new AudioManager();
