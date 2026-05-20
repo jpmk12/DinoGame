@@ -136,4 +136,21 @@ export class ParticleSystem {
       size: 0.22, speed: 8, life: 2.5, gravity: -6, upBias: 0.9,
     });
   }
+
+  watermelon(position) {
+    // Pink/red flesh + green rind chunks
+    this.burst(position, {
+      count: 14, colors: [0xff6a8a, 0xee5577, 0xff99aa],
+      size: 0.22, speed: 5, life: 1.0, gravity: -10,
+    });
+    this.burst(position, {
+      count: 6, colors: [0x2a6a2a, 0x6aa050],
+      size: 0.18, speed: 3.5, life: 0.9, gravity: -10,
+    });
+    // Black "seeds"
+    this.burst(position, {
+      count: 8, color: 0x222020,
+      size: 0.06, speed: 6, life: 1.4, gravity: -12,
+    });
+  }
 }

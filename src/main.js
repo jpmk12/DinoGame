@@ -39,6 +39,7 @@ import {
   BABY_DURATION,
   BABY_EAT_RADIUS,
 } from './eggs.js';
+import { spawnFoods, spawnFood, animateFoods } from './foods.js';
 
 // Tell the boot watchdog (defined in index.html) that the module loaded
 // successfully and all imports resolved.
@@ -145,6 +146,7 @@ let player = null;
 let entities = null;     // Group of enemies + critters
 let berries = null;      // Group of power-up berries
 let eggs = null;         // Group of egg nests
+let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
 let babies = [];         // active baby dinos (THREE.Group instances)
 let score = 0;
 let gameRunning = false;
@@ -195,6 +197,7 @@ function startGame(species) {
   if (entities) scene.remove(entities);
   if (berries) scene.remove(berries);
   if (eggs) scene.remove(eggs);
+  if (foods) scene.remove(foods);
   removeAllBabies();
 
   player = buildPlayer(species);
@@ -205,6 +208,7 @@ function startGame(species) {
   entities = populate(scene, player.position);
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
+  foods = spawnFoods(scene, player.position);
   score = 0;
   hasWon = false;
   power.active = null;
@@ -259,6 +263,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   scene.remove(entities);
   if (berries) scene.remove(berries);
   if (eggs) scene.remove(eggs);
+  if (foods) scene.remove(foods);
   removeAllBabies();
   player = buildPlayer(species);
   player.userData.stage = lostStage;
@@ -269,6 +274,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   entities = populate(scene, player.position);
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
+  foods = spawnFoods(scene, player.position);
   power.active = null;
   power.timeLeft = 0;
   updatePowerupHUD();
@@ -429,7 +435,7 @@ function updateBabies(dt) {
       continue;
     }
 
-    // Find the nearest small food (plant or critter) within 6 units
+    // Find the nearest small food (plant, food item, or critter) within 6 units
     let target = null;
     let targetDist = 6;
     let targetGroup = null;
@@ -441,6 +447,18 @@ function updateBabies(dt) {
           target = p;
           targetDist = d;
           targetGroup = plants;
+        }
+      }
+    }
+    if (foods) {
+      for (const f of foods.children) {
+        // Babies skip the big watermelons — leave them for the player
+        if (f.userData.foodType === 'watermelon') continue;
+        const d = baby.position.distanceTo(f.position);
+        if (d < targetDist) {
+          target = f;
+          targetDist = d;
+          targetGroup = foods;
         }
       }
     }
@@ -486,16 +504,19 @@ function updateBabies(dt) {
 
     // Eat if close enough
     if (target && targetDist < BABY_EAT_RADIUS) {
-      const wasPlant = target.userData.kind === 'plant';
+      const kind = target.userData.kind;
       const nutrition = target.userData.nutrition || 1;
-      particles[wasPlant ? 'leaves' : 'meat'](target.position);
+      // Particle by food type, falling back to meat/leaves
+      const pType = target.userData.particleType ||
+                    (kind === 'plant' ? 'leaves' : 'meat');
+      if (particles[pType]) particles[pType](target.position);
       audio.chompPlant();
       targetGroup.remove(target);
-      // Award the player — slightly less than eating it yourself
       addGrowth(nutrition);
-      score += wasPlant ? 1 : 2;
+      score += (target.userData.score) || (kind === 'plant' ? 1 : 2);
       // Replenish what was eaten so the world stays populated
-      if (wasPlant) spawnPlantRandom(plants);
+      if (kind === 'plant') spawnPlantRandom(plants);
+      else if (kind === 'food') spawnFood(foods, player.position, target.userData.foodType);
       else spawnCritter(entities, player.position);
     }
 
@@ -616,6 +637,7 @@ function frame() {
     updateBabies(dt);
     if (berries) animateBerries(berries, dt);
     if (eggs) animateEggs(eggs, dt);
+    if (foods) animateFoods(foods, dt);
     updatePowerup(dt);
     handleEggInteraction();
     handleEating(dt);
@@ -815,6 +837,33 @@ function handleEating(dt) {
       addGrowth(p.userData.nutrition * growthMult);
       score += 1;
       spawnPlantRandom(plants);
+    }
+  }
+
+  // Foods (mushrooms, fruit, beetles, etc.)
+  if (foods) {
+    for (let i = foods.children.length - 1; i >= 0; i--) {
+      const f = foods.children[i];
+      const d = f.position.distanceTo(player.position);
+      if (d < (playerSize + f.userData.size) * 0.7 * reachBoost) {
+        const ft = f.userData.foodType;
+        const pType = f.userData.particleType || 'leaves';
+        if (particles[pType]) particles[pType](f.position);
+        // Pick sound per food type
+        if (ft === 'watermelon') {
+          audio.chompBig();
+          shake = Math.max(shake, 0.15);
+        } else if (ft === 'beetle') {
+          audio.chompCritter();
+        } else {
+          audio.chompPlant();
+        }
+        foods.remove(f);
+        addGrowth((f.userData.nutrition || 1) * growthMult);
+        score += f.userData.score || 1;
+        // Respawn the same food type elsewhere to keep biome variety stable
+        spawnFood(foods, player.position, ft);
+      }
     }
   }
 
