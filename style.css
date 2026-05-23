@@ -116,6 +116,91 @@ html, body {
   font-weight: 700;
 }
 
+/* ---------- Settings toggles ---------- */
+#settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  justify-content: center;
+  margin-bottom: 22px;
+  padding: 0 12px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  background: #2a5a3a;
+  border: 3px solid #fff;
+  border-radius: 26px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.toggle input:checked + .toggle-slider {
+  background: #ffaa44;
+}
+
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+.toggle-label {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 2px 2px 0 #2a5a3a;
+  letter-spacing: 0.5px;
+}
+
+/* ---------- Invincible HUD indicator ---------- */
+#invincible-indicator {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid #88ddff;
+  border-radius: 16px;
+  padding: 6px 12px;
+  font-weight: 800;
+  font-size: 14px;
+  color: #cef0ff;
+  text-shadow: 1px 1px 0 #000;
+  animation: invinciblePulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes invinciblePulse {
+  from { box-shadow: 0 0 4px rgba(136, 221, 255, 0.5); }
+  to   { box-shadow: 0 0 16px rgba(136, 221, 255, 1); }
+}
+
 #picker {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

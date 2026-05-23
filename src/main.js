@@ -148,6 +148,12 @@ let berries = null;      // Group of power-up berries
 let eggs = null;         // Group of egg nests
 let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
 let babies = [];         // active baby dinos (THREE.Group instances)
+
+// Title-screen game options — read at startGame.
+const gameSettings = {
+  startGiant: false,
+  invincible: false,
+};
 let score = 0;
 let gameRunning = false;
 let hasWon = false;      // win celebration only shows once per run
@@ -182,6 +188,9 @@ const babyIndicator = document.getElementById('baby-indicator');
 const babyTimerEl = document.getElementById('baby-timer');
 const eggPrompt = document.getElementById('egg-prompt');
 const eggProgressFill = document.getElementById('egg-progress-fill');
+const invincibleIndicator = document.getElementById('invincible-indicator');
+const optGiantCb = document.getElementById('opt-giant');
+const optInvincibleCb = document.getElementById('opt-invincible');
 
 // ---------------- Start / restart ----------------
 function applyPlayerScale() {
@@ -193,6 +202,10 @@ function applyPlayerScale() {
 
 function startGame(species) {
   audio.unlock();
+  // Read title-screen toggles into the live settings
+  gameSettings.startGiant = !!(optGiantCb && optGiantCb.checked);
+  gameSettings.invincible = !!(optInvincibleCb && optInvincibleCb.checked);
+
   if (player) scene.remove(player);
   if (entities) scene.remove(entities);
   if (berries) scene.remove(berries);
@@ -201,6 +214,11 @@ function startGame(species) {
   removeAllBabies();
 
   player = buildPlayer(species);
+  // Roam mode: jump straight to GIANT (stage 4). Otherwise normal hatchling start.
+  if (gameSettings.startGiant) {
+    player.userData.stage = 4;
+    player.userData.growth = STAGE_THRESHOLD[4];
+  }
   player.position.set(0, getHeightAt(0, 0), 0);
   applyPlayerScale();
   scene.add(player);
@@ -210,12 +228,13 @@ function startGame(species) {
   eggs = spawnEggs(scene, player.position, 4);
   foods = spawnFoods(scene, player.position);
   score = 0;
-  hasWon = false;
+  hasWon = gameSettings.startGiant; // skip win celebration if you started there
   power.active = null;
   power.timeLeft = 0;
   updatePowerupHUD();
   hideBabyIndicator();
   hideEggPrompt();
+  updateInvincibleHUD();
   resetFacts();
   gameRunning = true;
 
@@ -225,6 +244,11 @@ function startGame(species) {
   titleScreen.classList.add('hidden');
   gameOverEl.classList.add('hidden');
   winScreen.classList.add('hidden');
+}
+
+function updateInvincibleHUD() {
+  if (gameSettings.invincible) invincibleIndicator.classList.remove('hidden');
+  else invincibleIndicator.classList.add('hidden');
 }
 
 function removeAllBabies() {
@@ -901,7 +925,7 @@ function handleEating(dt) {
       spawnCritter(entities, player.position);
     } else if (ent.userData.kind === 'enemy') {
       const enemyScale = ent.userData.scale;
-      const canEat = apex || playerScale >= enemyScale * 0.95;
+      const canEat = apex || gameSettings.invincible || playerScale >= enemyScale * 0.95;
       if (canEat) {
         particles.meat(ent.position);
         // Sound depends on the enemy's size
