@@ -800,6 +800,111 @@ export function buildTree() {
 }
 
 /**
+ * Palm tree — tall thin trunk + radial fronds. Used by tropical levels.
+ */
+export function buildPalmTree() {
+  const root = new THREE.Group();
+  // Curved-ish trunk built from stacked tilted cylinders
+  const segs = 5;
+  const trunkColor = 0x8a6a3a;
+  const trunkMat = new THREE.MeshLambertMaterial({ color: trunkColor });
+  let py = 0;
+  let lean = (Math.random() - 0.5) * 0.25;
+  for (let i = 0; i < segs; i++) {
+    const r = 0.18 - i * 0.02;
+    const seg = new THREE.Mesh(
+      new THREE.CylinderGeometry(r * 0.85, r, 0.7, 6),
+      trunkMat
+    );
+    seg.position.set(lean * i * 0.15, py + 0.35, lean * i * 0.1);
+    seg.castShadow = true;
+    seg.receiveShadow = true;
+    root.add(seg);
+    py += 0.65;
+  }
+  // Crown — 6-8 fronds radiating outward
+  const crown = new THREE.Group();
+  crown.position.set(lean * (segs - 1) * 0.15, py + 0.1, lean * (segs - 1) * 0.1);
+  const frondMat = new THREE.MeshLambertMaterial({
+    color: 0x3a8a3a,
+    side: THREE.DoubleSide,
+    flatShading: true,
+  });
+  const fronds = 8;
+  for (let i = 0; i < fronds; i++) {
+    const angle = (i / fronds) * Math.PI * 2;
+    const frond = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.5, 1.6, 1, 4),
+      frondMat
+    );
+    // Bend it down at the tip via vertex displacement
+    const pos = frond.geometry.attributes.position;
+    for (let v = 0; v < pos.count; v++) {
+      const y = pos.getY(v);
+      // y goes from -0.8 to 0.8; tip at +0.8 should droop
+      if (y > 0) {
+        pos.setZ(v, -((y / 0.8) ** 2) * 0.6);
+      }
+    }
+    pos.needsUpdate = true;
+    frond.geometry.computeVertexNormals();
+    frond.position.set(Math.cos(angle) * 0.5, 0, Math.sin(angle) * 0.5);
+    frond.rotation.y = angle + Math.PI / 2;
+    frond.rotation.x = -0.5; // angle upward at the base
+    frond.castShadow = true;
+    crown.add(frond);
+  }
+  // Coconut cluster (a few small spheres)
+  for (let i = 0; i < 3; i++) {
+    const c = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 6, 5),
+      new THREE.MeshLambertMaterial({ color: 0x5a3a1a })
+    );
+    c.position.set(
+      (Math.random() - 0.5) * 0.3,
+      -0.05,
+      (Math.random() - 0.5) * 0.3
+    );
+    c.castShadow = true;
+    crown.add(c);
+  }
+  root.add(crown);
+  return root;
+}
+
+/**
+ * Fern — low ground decoration for tropical zones.
+ */
+export function buildFern() {
+  const root = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({
+    color: 0x4aa050,
+    side: THREE.DoubleSide,
+    flatShading: true,
+  });
+  const blades = 5;
+  for (let i = 0; i < blades; i++) {
+    const blade = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.35, 0.9, 1, 3),
+      mat
+    );
+    const pos = blade.geometry.attributes.position;
+    for (let v = 0; v < pos.count; v++) {
+      const y = pos.getY(v);
+      if (y > 0) pos.setZ(v, -((y / 0.45) ** 2) * 0.25);
+    }
+    pos.needsUpdate = true;
+    blade.geometry.computeVertexNormals();
+    blade.position.y = 0.45;
+    blade.rotation.y = (i / blades) * Math.PI * 2;
+    blade.rotation.x = -0.4;
+    blade.castShadow = true;
+    root.add(blade);
+  }
+  return root;
+}
+
+/**
  * Cactus for the desert biome.
  */
 export function buildCactus() {

@@ -25,12 +25,15 @@ export class WeatherSystem {
 
     // Choose visuals by kind
     const recipes = {
-      snow:     { color: 0xffffff, emissive: 0.0, size: 0.18 },
-      embers:   { color: 0xff7a3a, emissive: 0.9, size: 0.12 },
-      fireflies:{ color: 0xfff099, emissive: 1.0, size: 0.10 },
+      snow:     { color: 0xffffff, emissive: 0.0, size: 0.18, geom: 'sphere' },
+      embers:   { color: 0xff7a3a, emissive: 0.9, size: 0.12, geom: 'sphere' },
+      fireflies:{ color: 0xfff099, emissive: 1.0, size: 0.10, geom: 'sphere' },
+      rain:     { color: 0xa0c0d0, emissive: 0.2, size: 0.04, geom: 'streak' },
     };
     const r = recipes[kind];
-    const geom = new THREE.SphereGeometry(r.size, 6, 5);
+    const geom = r.geom === 'streak'
+      ? new THREE.BoxGeometry(r.size, r.size * 8, r.size)
+      : new THREE.SphereGeometry(r.size, 6, 5);
     const mat = new THREE.MeshBasicMaterial({
       color: r.color,
       transparent: true,
@@ -76,6 +79,14 @@ export class WeatherSystem {
         (Math.random() - 0.5) * 0.4,
         -2 - Math.random() * 1.2,
         (Math.random() - 0.5) * 0.4
+      );
+    } else if (this.kind === 'rain') {
+      // Rain falls faster and straighter than snow
+      p.mesh.position.y = playerPos.y + 22 + Math.random() * 6;
+      p.vel.set(
+        (Math.random() - 0.5) * 0.6,
+        -14 - Math.random() * 3,
+        (Math.random() - 0.5) * 0.6
       );
     } else if (this.kind === 'embers') {
       // Embers rise from low
@@ -139,6 +150,10 @@ export class WeatherSystem {
         // Snow respawns when it hits ground
         const groundY = getHeightAt(p.mesh.position.x, p.mesh.position.z);
         if (p.mesh.position.y < groundY + 0.2) recycle = true;
+        if (offGrid) recycle = true;
+      } else if (this.kind === 'rain') {
+        const groundY = getHeightAt(p.mesh.position.x, p.mesh.position.z);
+        if (p.mesh.position.y < groundY + 0.1) recycle = true;
         if (offGrid) recycle = true;
       } else if (this.kind === 'embers') {
         if (p.phase > 4) recycle = true;

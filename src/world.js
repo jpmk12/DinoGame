@@ -1,8 +1,12 @@
 import * as THREE from 'three';
-import { buildTree, buildCactus, buildRock, buildPlant } from './dinos.js';
+import {
+  buildTree, buildCactus, buildRock, buildPlant,
+  buildPalmTree, buildFern,
+} from './dinos.js';
 import { getLevel } from './levels.js';
 
-export const WORLD_SIZE = 120; // half-extent
+export const WORLD_SIZE = 120;       // half-extent of the visible ground
+export const PLAYABLE_RADIUS = 100;  // player + entities clamp inside this — mountains start at 90
 
 // Biome lookup based on world coords.
 // Forest = north (-Z), Swamp = east (+X), Desert = south/west.
@@ -27,6 +31,26 @@ export function getHeightAt(x, z) {
   h += Math.cos((x - z) * 0.055) * 0.6;
   // Small detail bumps
   h += Math.sin(x * 0.18) * 0.25 + Math.cos(z * 0.2) * 0.25;
+  // Boundary mountains: terrain ramps up beyond dist 90, so the world
+  // edges feel like distant mountains rather than a drop-off.
+  const edgeDist = Math.max(0, Math.max(Math.abs(x), Math.abs(z)) - 90);
+  if (edgeDist > 0) {
+    h += edgeDist * edgeDist * 0.04;
+  }
+
+  // Per-level central peak (e.g. Mt. Sibo on Isla Nublar)
+  const level = getLevel();
+  const peak = level && level.centerPeak;
+  if (peak) {
+    const dx = x - peak.x;
+    const dz = z - peak.z;
+    const d = Math.hypot(dx, dz);
+    if (d < peak.radius) {
+      // Smooth cone: high in the middle, ramping down toward the radius
+      const t = 1 - d / peak.radius;
+      h += peak.height * t * t * (3 - 2 * t); // smoothstep curve
+    }
+  }
   return h;
 }
 
@@ -43,6 +67,9 @@ export function buildWorld(scene) {
   const colors = [];
   const pos = geom.attributes.position;
   const color = new THREE.Color();
+  // Rocky tint applied to high-elevation vertices for mountains/peaks
+  const rockColor = new THREE.Color(level.mountainColor != null ? level.mountainColor : 0x6a6660);
+  const snowColor = new THREE.Color(0xf0f4f8);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
@@ -52,7 +79,17 @@ export function buildWorld(scene) {
     color.r *= variation;
     color.g *= variation;
     color.b *= variation;
-    pos.setY(i, getHeightAt(x, z));
+    const y = getHeightAt(x, z);
+    pos.setY(i, y);
+    // Blend toward rock above ~5 units, toward snow above ~20 units
+    if (y > 5) {
+      const rockT = Math.min(1, (y - 5) / 12);
+      color.lerp(rockColor, rockT * 0.85);
+    }
+    if (y > 20 && level.snowyPeaks !== false) {
+      const snowT = Math.min(1, (y - 20) / 10);
+      color.lerp(snowColor, snowT * 0.75);
+    }
     colors.push(color.r, color.g, color.b);
   }
   geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -69,49 +106,80 @@ export function buildWorld(scene) {
   const decorations = new THREE.Group();
   scene.add(decorations);
 
-  // Forest trees
-  for (let i = 0; i < 80; i++) {
-    const x = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
-    const z = -20 - Math.random() * (WORLD_SIZE - 20);
+  const tropical = !!level.tropicalTrees;
+
+  // Forest / jungle trees — palms for tropical levels, normal trees otherwise
+  for (let i = 0; i < 110; i++) {
+    const x = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
+    const z = -20 - Math.random() * (WORLD_SIZE - 10);
     if (Math.hypot(x, z) < 8) continue;
-    const t = buildTree();
+    const t = tropical ? buildPalmTree() : buildTree();
     t.position.set(x, getHeightAt(x, z), z);
     t.scale.setScalar(0.8 + Math.random() * 0.6);
     t.rotation.y = Math.random() * Math.PI * 2;
     decorations.add(t);
   }
 
-  // Swamp trees (taller, sparser)
-  for (let i = 0; i < 30; i++) {
-    const x = 25 + Math.random() * (WORLD_SIZE - 25);
-    const z = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
-    const t = buildTree();
+  // Swamp trees (taller, sparser) — also use palms on tropical
+  for (let i = 0; i < 40; i++) {
+    const x = 25 + Math.random() * (WORLD_SIZE - 15);
+    const z = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
+    const t = tropical ? buildPalmTree() : buildTree();
     t.position.set(x, getHeightAt(x, z), z);
     t.scale.setScalar(1.0 + Math.random() * 0.4);
     t.rotation.y = Math.random() * Math.PI * 2;
     decorations.add(t);
   }
 
-  // Desert cacti
+  // Desert / beach decorations
   for (let i = 0; i < 40; i++) {
-    const x = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
-    const z = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
+    const x = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
+    const z = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     if (biomeAt(x, z) !== 'desert') continue;
     if (Math.hypot(x, z) < 8) continue;
-    const c = buildCactus();
-    c.position.set(x, getHeightAt(x, z), z);
-    c.scale.setScalar(0.8 + Math.random() * 0.5);
-    decorations.add(c);
+    // Tropical desert = beach: sprinkle a few palms here too instead of cacti
+    const obj = tropical ? buildPalmTree() : buildCactus();
+    obj.position.set(x, getHeightAt(x, z), z);
+    obj.scale.setScalar(0.8 + Math.random() * 0.5);
+    decorations.add(obj);
   }
 
-  // Rocks scattered everywhere
-  for (let i = 0; i < 60; i++) {
-    const x = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
-    const z = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
+  // Ferns on tropical levels — ground cover under the canopy
+  if (tropical) {
+    for (let i = 0; i < 80; i++) {
+      const x = (Math.random() - 0.5) * WORLD_SIZE * 1.9;
+      const z = (Math.random() - 0.5) * WORLD_SIZE * 1.9;
+      if (Math.hypot(x, z) < 6) continue;
+      // Mostly in the jungle/swamp zones
+      const b = biomeAt(x, z);
+      if (b === 'desert' && Math.random() > 0.2) continue;
+      const f = buildFern();
+      f.position.set(x, getHeightAt(x, z), z);
+      f.scale.setScalar(0.7 + Math.random() * 0.6);
+      f.rotation.y = Math.random() * Math.PI * 2;
+      decorations.add(f);
+    }
+  }
+
+  // Rocks — scatter everywhere AND clump heavily in the boundary mountains
+  for (let i = 0; i < 80; i++) {
+    const x = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
+    const z = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     if (Math.hypot(x, z) < 6) continue;
     const r = buildRock();
     r.position.set(x, getHeightAt(x, z), z);
     r.scale.setScalar(0.6 + Math.random() * 1.2);
+    decorations.add(r);
+  }
+  // Extra rocks clinging to the boundary mountain slopes
+  for (let i = 0; i < 80; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 92 + Math.random() * 25;
+    const x = Math.cos(ang) * dist;
+    const z = Math.sin(ang) * dist;
+    const r = buildRock();
+    r.position.set(x, getHeightAt(x, z), z);
+    r.scale.setScalar(1.0 + Math.random() * 2.0);
     decorations.add(r);
   }
 

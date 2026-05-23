@@ -140,8 +140,8 @@
       };
       window.__dinoShowError = show;
 
+      let hadRealError = false;
       window.addEventListener('error', (e) => {
-        // Catches both script errors and asset load failures (<script>, <link>)
         const tgt = e.target;
         if (tgt && (tgt.src || tgt.href)) {
           show('Failed to load: ' + (tgt.src || tgt.href));
@@ -149,10 +149,13 @@
           show((e.message || 'Unknown error') + '\n' + (e.filename || '') +
                (e.lineno ? ':' + e.lineno : ''));
         }
+        hadRealError = true;
       }, true);
       window.addEventListener('unhandledrejection', (e) => {
         show('Promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+        hadRealError = true;
       });
+      window.__dinoBoot.hadRealError = () => hadRealError;
 
       // Watchdog: if main.js hasn't run 4s after the page loaded, something
       // (extension, CDN block, parse error) is preventing the module from
@@ -162,7 +165,8 @@
           if (window.__dinoBoot.stage !== 'main-ran') {
             const picker = document.getElementById('picker');
             const hasButtons = picker && picker.children.length > 0;
-            if (!hasButtons) {
+            // Don't overwrite a real error message that was already shown.
+            if (!hasButtons && !window.__dinoBoot.hadRealError()) {
               show(
                 'The game module did not load.\n' +
                 'Last stage: ' + window.__dinoBoot.stage + '\n\n' +

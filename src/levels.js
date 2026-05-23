@@ -59,6 +59,32 @@ export const LEVELS = {
     weather: 'snow',
   },
 
+  islaNublar: {
+    key: 'islaNublar',
+    name: 'Isla Nublar',
+    desc: 'Tropical jungle island',
+    icon: '🏝️',
+    biomeColors: {
+      forest: 0x2a6a3a,   // deep jungle green
+      swamp:  0x3a5a2a,   // mossy lowland
+      desert: 0xe8d6a8,   // sandy beach
+    },
+    sky: { top: 0x4080b0, mid: 0x9ad0e8, bottom: 0xcce0d8, glow: [0.10, 0.14, 0.10] },
+    fog: { color: 0xa8c4b8, density: 0.014 },
+    sun: { color: 0xfff0c8, intensity: 1.0, pos: [25, 55, 25] },
+    hemi: { sky: 0xa0c8b8, ground: 0x3a6a3a, intensity: 0.65 },
+    rim: { color: 0xa0c0a0, intensity: 0.4 },
+    cloud: { color: 0xe8e8ec, emissive: 0.1 },
+    weather: 'rain',
+    tropicalTrees: true,         // jungle trees use palms; ferns spawn as ground cover
+    mountainColor: 0x5a5048,     // darker basalt for the volcanic peak
+    centerPeak: {                // Mt. Sibo — visible iconic volcano
+      x: -55, z: -55,
+      radius: 38,
+      height: 42,
+    },
+  },
+
   night: {
     key: 'night',
     name: 'Night Forest',

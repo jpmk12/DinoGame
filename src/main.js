@@ -3,6 +3,7 @@ import { Controls } from './controls.js';
 import {
   buildWorld,
   WORLD_SIZE,
+  PLAYABLE_RADIUS,
   spawnPlantRandom,
   getHeightAt,
   animateClouds,
@@ -158,6 +159,9 @@ resize();
 // ---------------- World ----------------
 let plants = null;
 let clouds = null;
+let worldGroups = null; // { ground, decorations, plants, clouds, sky } — tracked for rebuild
+let weather = null;
+let homeNest = null;
 
 function teardownWorld() {
   if (!worldGroups) return;
@@ -190,10 +194,6 @@ let berries = null;      // Group of power-up berries
 let eggs = null;         // Group of egg nests
 let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
 let babies = [];         // active baby dinos (THREE.Group instances)
-
-let homeNest = null;
-let weather = null;
-let worldGroups = null; // { ground, decorations, plants, clouds, sky } — tracked for rebuild
 
 // Title-screen game options — read at startGame.
 const gameSettings = {
@@ -870,8 +870,8 @@ function updatePlayer(dt) {
     player.rotation.y += diff * Math.min(1, dt * 12);
     moving = true;
   }
-  // Clamp to world
-  const limit = WORLD_SIZE - 2;
+  // Clamp to playable area (mountains rise beyond this so the wall feels natural)
+  const limit = PLAYABLE_RADIUS;
   player.position.x = Math.max(-limit, Math.min(limit, player.position.x));
   player.position.z = Math.max(-limit, Math.min(limit, player.position.z));
 
@@ -992,7 +992,7 @@ function updateEntities(dt) {
     }
 
     // Clamp to world
-    const limit = WORLD_SIZE - 2;
+    const limit = PLAYABLE_RADIUS;
     ent.position.x = Math.max(-limit, Math.min(limit, ent.position.x));
     ent.position.z = Math.max(-limit, Math.min(limit, ent.position.z));
   }
