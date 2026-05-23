@@ -116,6 +116,68 @@ html, body {
   font-weight: 700;
 }
 
+/* ---------- Level picker ---------- */
+#level-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: min(92vw, 480px);
+  margin-bottom: 18px;
+  padding: 0 4px;
+}
+
+@media (min-width: 640px) {
+  #level-picker {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.level-choice {
+  background: #fff;
+  border: 3px solid #2a5a3a;
+  border-radius: 14px;
+  padding: 8px 6px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: transform 0.1s, background 0.15s, border-color 0.15s;
+}
+
+.level-choice:active {
+  transform: scale(0.95);
+}
+
+.level-choice.selected {
+  background: #ffd24a;
+  border-color: #ffaa44;
+  box-shadow: 0 0 12px rgba(255, 210, 74, 0.7);
+}
+
+.level-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.level-name {
+  font-size: 12px;
+  font-weight: 900;
+  color: #2a5a3a;
+  letter-spacing: 0.3px;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.level-desc {
+  font-size: 9px;
+  color: #5a7a3a;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.1;
+}
+
 /* ---------- Settings toggles ---------- */
 #settings {
   display: flex;
@@ -199,6 +261,57 @@ html, body {
 @keyframes invinciblePulse {
   from { box-shadow: 0 0 4px rgba(136, 221, 255, 0.5); }
   to   { box-shadow: 0 0 16px rgba(136, 221, 255, 1); }
+}
+
+/* ---------- Home indicator ---------- */
+#home-indicator {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid #ffd28a;
+  border-radius: 16px;
+  padding: 6px 12px;
+  font-weight: 800;
+  font-size: 14px;
+  color: #fff4d0;
+  text-shadow: 1px 1px 0 #000;
+  animation: homePulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes homePulse {
+  from { box-shadow: 0 0 4px rgba(255, 232, 138, 0.5); }
+  to   { box-shadow: 0 0 14px rgba(255, 232, 138, 0.95); }
+}
+
+/* ---------- Homeward compass ---------- */
+#compass {
+  position: fixed;
+  top: env(safe-area-inset-top, 12px);
+  right: 12px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  z-index: 11;
+}
+
+#compass-arrow {
+  font-size: 32px;
+  color: #ffd24a;
+  text-shadow: 2px 2px 0 #000, 0 0 8px rgba(255, 210, 74, 0.6);
+  line-height: 1;
+}
+
+#compass-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 2px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 #picker {

@@ -40,6 +40,14 @@
     <div id="invincible-indicator" class="hidden">
       🛡️ Invincible
     </div>
+    <div id="home-indicator" class="hidden">
+      🏠 Home — resting...
+    </div>
+  </div>
+
+  <div id="compass" class="hidden">
+    <div id="compass-arrow">▲</div>
+    <div id="compass-label">Home <span id="compass-dist"></span></div>
   </div>
 
   <div id="egg-prompt" class="hidden">
@@ -64,6 +72,9 @@
     <h1>DinoGrow</h1>
     <p class="subtitle">Eat. Grow. Become a giant!</p>
 
+    <p class="prompt">Pick your world:</p>
+    <div id="level-picker"><!-- populated by main.js --></div>
+
     <div id="settings">
       <label class="toggle">
         <input type="checkbox" id="opt-giant" />
@@ -74,6 +85,16 @@
         <input type="checkbox" id="opt-invincible" />
         <span class="toggle-slider"></span>
         <span class="toggle-label">🛡️ Invincible</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="opt-speed" />
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">🚀 Speed Demon</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="opt-megafood" />
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">🍔 Mega Food</span>
       </label>
     </div>
 

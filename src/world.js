@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildTree, buildCactus, buildRock, buildPlant } from './dinos.js';
+import { getLevel } from './levels.js';
 
 export const WORLD_SIZE = 120; // half-extent
 
@@ -10,12 +11,6 @@ export function biomeAt(x, z) {
   if (x > 25) return 'swamp';
   return 'desert';
 }
-
-const BIOME_COLORS = {
-  forest: 0x5fae5c,
-  swamp:  0x4a7a5a,
-  desert: 0xd4b070,
-};
 
 /**
  * Smooth rolling-hills height function. Sampled by the ground geometry
@@ -40,6 +35,7 @@ export function getHeightAt(x, z) {
  * Returns { ground, decorations, plants }.
  */
 export function buildWorld(scene) {
+  const level = getLevel();
   // Higher segment count so hills look smooth
   const segs = 120;
   const geom = new THREE.PlaneGeometry(WORLD_SIZE * 2, WORLD_SIZE * 2, segs, segs);
@@ -51,9 +47,8 @@ export function buildWorld(scene) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
     const b = biomeAt(x, z);
-    // Biome blend near borders for softer transitions
-    color.setHex(BIOME_COLORS[b]);
-    const variation = 0.85 + Math.random() * 0.3; // tonal noise per vertex
+    color.setHex(level.biomeColors[b]);
+    const variation = 0.85 + Math.random() * 0.3;
     color.r *= variation;
     color.g *= variation;
     color.b *= variation;
@@ -128,10 +123,10 @@ export function buildWorld(scene) {
   }
 
   // Sky + clouds
-  buildSky(scene);
+  const sky = buildSky(scene);
   const clouds = buildClouds(scene);
 
-  return { ground, decorations, plants, clouds };
+  return { ground, decorations, plants, clouds, sky };
 }
 
 export function spawnPlantRandom(plantsGroup) {
@@ -149,17 +144,19 @@ export function spawnPlantRandom(plantsGroup) {
 
 /**
  * Gradient sky dome — large inverted sphere with a custom shader.
- * Goes from warm horizon to deep zenith.
+ * Reads top/mid/bottom/glow from the active level theme.
  */
 function buildSky(scene) {
+  const level = getLevel();
   const geom = new THREE.SphereGeometry(450, 32, 16);
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
-      topColor:    { value: new THREE.Color(0x3b6fb0) },
-      midColor:    { value: new THREE.Color(0x9cd3ff) },
-      bottomColor: { value: new THREE.Color(0xffd8a8) },
+      topColor:    { value: new THREE.Color(level.sky.top) },
+      midColor:    { value: new THREE.Color(level.sky.mid) },
+      bottomColor: { value: new THREE.Color(level.sky.bottom) },
+      glow:        { value: new THREE.Vector3(...level.sky.glow) },
     },
     vertexShader: `
       varying vec3 vWorldPos;
@@ -173,15 +170,14 @@ function buildSky(scene) {
       uniform vec3 topColor;
       uniform vec3 midColor;
       uniform vec3 bottomColor;
+      uniform vec3 glow;
       varying vec3 vWorldPos;
       void main() {
         float h = normalize(vWorldPos).y;
-        // Map y from [-1,1] to a smoother gradient with a warm horizon band
         float horizonGlow = smoothstep(-0.05, 0.15, h) * (1.0 - smoothstep(0.15, 0.45, h));
         vec3 sky = mix(bottomColor, midColor, smoothstep(-0.1, 0.4, h));
         sky = mix(sky, topColor, smoothstep(0.3, 0.85, h));
-        // Add a warm horizon glow
-        sky += vec3(0.18, 0.12, 0.04) * horizonGlow;
+        sky += glow * horizonGlow;
         gl_FragColor = vec4(sky, 1.0);
       }
     `,
@@ -193,16 +189,18 @@ function buildSky(scene) {
 }
 
 /**
- * Chunky low-poly clouds — clusters of overlapping spheres painted white.
- * Returns a Group so the main loop can drift them slowly.
+ * Chunky low-poly clouds — clusters of overlapping spheres.
+ * Color/emissive comes from the level theme (white for daytime, dark for
+ * volcano ash, dim grey for night).
  */
 function buildClouds(scene) {
+  const level = getLevel();
   const group = new THREE.Group();
   scene.add(group);
   const cloudMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.15,
+    color: level.cloud.color,
+    emissive: level.cloud.color,
+    emissiveIntensity: level.cloud.emissive,
   });
   for (let i = 0; i < 14; i++) {
     const cloud = new THREE.Group();

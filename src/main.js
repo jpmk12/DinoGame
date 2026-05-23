@@ -40,6 +40,16 @@ import {
   BABY_EAT_RADIUS,
 } from './eggs.js';
 import { spawnFoods, spawnFood, animateFoods } from './foods.js';
+import { LEVELS, LEVEL_KEYS, setLevelKey, getLevel, getLevelKey } from './levels.js';
+import { WeatherSystem } from './weather.js';
+import {
+  buildHomeNest,
+  animateNest,
+  distanceToHome,
+  isAtHome,
+  HOME_RADIUS,
+  HOME_REGEN_RATE,
+} from './nest.js';
 
 // Tell the boot watchdog (defined in index.html) that the module loaded
 // successfully and all imports resolved.
@@ -62,14 +72,11 @@ scene.fog = new THREE.FogExp2(0xeac49a, 0.011);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
 camera.position.set(0, 8, 12);
 
-// ----- Lighting -----
-// Hemisphere fills shadows with sky/ground tones (much more natural than flat ambient).
-const hemi = new THREE.HemisphereLight(0xb0d4f0, 0x4a5a30, 0.65);
+// ----- Lighting (theme-driven; re-applied on level change) -----
+const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.65);
 scene.add(hemi);
 
-// Warm directional sun — golden-hour vibe.
-const sun = new THREE.DirectionalLight(0xfff1cf, 1.15);
-sun.position.set(30, 60, 20);
+const sun = new THREE.DirectionalLight(0xffffff, 1.15);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -45;
@@ -82,15 +89,27 @@ sun.shadow.bias = -0.0005;
 sun.shadow.normalBias = 0.02;
 scene.add(sun);
 
-// Cool rim/back light from the opposite side. Just barely there, but it
-// puts a hint of separation around silhouettes against the ground.
-const rim = new THREE.DirectionalLight(0xa8c8ff, 0.35);
-rim.position.set(-40, 40, -30);
+const rim = new THREE.DirectionalLight(0xffffff, 0.35);
 scene.add(rim);
 
 const sunTarget = new THREE.Object3D();
 scene.add(sunTarget);
 sun.target = sunTarget;
+
+function applyLevelTheme() {
+  const level = getLevel();
+  hemi.color.setHex(level.hemi.sky);
+  hemi.groundColor.setHex(level.hemi.ground);
+  hemi.intensity = level.hemi.intensity;
+  sun.color.setHex(level.sun.color);
+  sun.intensity = level.sun.intensity;
+  sun.position.set(...level.sun.pos);
+  rim.color.setHex(level.rim.color);
+  rim.intensity = level.rim.intensity;
+  rim.position.set(-level.sun.pos[0], level.sun.pos[1] * 0.7, -level.sun.pos[2]);
+  scene.fog = new THREE.FogExp2(level.fog.color, level.fog.density);
+}
+applyLevelTheme();
 
 // ---------------- Post-processing (bloom) ----------------
 // Lazy-loaded; if the CDN modules fail we silently fall back to direct
@@ -137,8 +156,31 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---------------- World ----------------
-const { plants, clouds } = buildWorld(scene);
+let plants = null;
+let clouds = null;
+
+function teardownWorld() {
+  if (!worldGroups) return;
+  for (const key of ['ground', 'decorations', 'plants', 'clouds', 'sky']) {
+    const obj = worldGroups[key];
+    if (obj) scene.remove(obj);
+  }
+  worldGroups = null;
+  plants = null;
+  clouds = null;
+}
+
+function setupWorld() {
+  teardownWorld();
+  worldGroups = buildWorld(scene);
+  plants = worldGroups.plants;
+  clouds = worldGroups.clouds;
+}
+
+setupWorld();
 const particles = new ParticleSystem(scene);
+weather = new WeatherSystem(scene);
+weather.setKind(getLevel().weather);
 
 // ---------------- Game state ----------------
 const controls = new Controls();
@@ -149,11 +191,19 @@ let eggs = null;         // Group of egg nests
 let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
 let babies = [];         // active baby dinos (THREE.Group instances)
 
+let homeNest = null;
+let weather = null;
+let worldGroups = null; // { ground, decorations, plants, clouds, sky } — tracked for rebuild
+
 // Title-screen game options — read at startGame.
 const gameSettings = {
   startGiant: false,
   invincible: false,
+  speedDemon: false,
+  megaFood: false,
 };
+let selectedLevelKey = 'lostWorld';
+let homeRegenAccum = 0;
 let score = 0;
 let gameRunning = false;
 let hasWon = false;      // win celebration only shows once per run
@@ -191,6 +241,12 @@ const eggProgressFill = document.getElementById('egg-progress-fill');
 const invincibleIndicator = document.getElementById('invincible-indicator');
 const optGiantCb = document.getElementById('opt-giant');
 const optInvincibleCb = document.getElementById('opt-invincible');
+const optSpeedCb = document.getElementById('opt-speed');
+const optMegaFoodCb = document.getElementById('opt-megafood');
+const homeIndicator = document.getElementById('home-indicator');
+const compassEl = document.getElementById('compass');
+const compassArrow = document.getElementById('compass-arrow');
+const compassDist = document.getElementById('compass-dist');
 
 // ---------------- Start / restart ----------------
 function applyPlayerScale() {
@@ -205,12 +261,23 @@ function startGame(species) {
   // Read title-screen toggles into the live settings
   gameSettings.startGiant = !!(optGiantCb && optGiantCb.checked);
   gameSettings.invincible = !!(optInvincibleCb && optInvincibleCb.checked);
+  gameSettings.speedDemon = !!(optSpeedCb && optSpeedCb.checked);
+  gameSettings.megaFood = !!(optMegaFoodCb && optMegaFoodCb.checked);
+
+  // Rebuild world if the chosen level differs from the active one
+  if (selectedLevelKey !== getLevelKey()) {
+    setLevelKey(selectedLevelKey);
+    applyLevelTheme();
+    setupWorld();
+    if (weather) weather.setKind(getLevel().weather);
+  }
 
   if (player) scene.remove(player);
   if (entities) scene.remove(entities);
   if (berries) scene.remove(berries);
   if (eggs) scene.remove(eggs);
   if (foods) scene.remove(foods);
+  if (homeNest) scene.remove(homeNest);
   removeAllBabies();
 
   player = buildPlayer(species);
@@ -227,6 +294,8 @@ function startGame(species) {
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
   foods = spawnFoods(scene, player.position);
+  homeNest = buildHomeNest(scene);
+  homeRegenAccum = 0;
   score = 0;
   hasWon = gameSettings.startGiant; // skip win celebration if you started there
   power.active = null;
@@ -255,6 +324,33 @@ function removeAllBabies() {
   for (const b of babies) scene.remove(b);
   babies = [];
 }
+
+// Build the level picker dynamically.
+function buildLevelPicker() {
+  const root = document.getElementById('level-picker');
+  if (!root) return;
+  root.innerHTML = '';
+  for (const key of LEVEL_KEYS) {
+    const lv = LEVELS[key];
+    const btn = document.createElement('button');
+    btn.className = 'level-choice';
+    btn.dataset.level = key;
+    if (key === selectedLevelKey) btn.classList.add('selected');
+    btn.innerHTML = `
+      <div class="level-icon">${lv.icon}</div>
+      <div class="level-name">${lv.name}</div>
+      <div class="level-desc">${lv.desc}</div>
+    `;
+    btn.addEventListener('click', () => {
+      selectedLevelKey = key;
+      for (const el of root.querySelectorAll('.level-choice')) {
+        el.classList.toggle('selected', el.dataset.level === key);
+      }
+    });
+    root.appendChild(btn);
+  }
+}
+buildLevelPicker();
 
 // Build the dino picker dynamically from the SPECIES registry.
 function buildPicker() {
@@ -288,6 +384,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   if (berries) scene.remove(berries);
   if (eggs) scene.remove(eggs);
   if (foods) scene.remove(foods);
+  if (homeNest) scene.remove(homeNest);
   removeAllBabies();
   player = buildPlayer(species);
   player.userData.stage = lostStage;
@@ -299,6 +396,8 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
   foods = spawnFoods(scene, player.position);
+  homeNest = buildHomeNest(scene);
+  homeRegenAccum = 0;
   power.active = null;
   power.timeLeft = 0;
   updatePowerupHUD();
@@ -662,12 +761,15 @@ function frame() {
     if (berries) animateBerries(berries, dt);
     if (eggs) animateEggs(eggs, dt);
     if (foods) animateFoods(foods, dt);
+    if (homeNest) animateNest(homeNest, dt);
     updatePowerup(dt);
+    updateHome(dt);
     handleEggInteraction();
     handleEating(dt);
     updateCamera(dt);
   }
   particles.update(dt);
+  if (weather && player) weather.update(dt, player.position);
 
   // Decay screen shake
   if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
@@ -678,6 +780,59 @@ function frame() {
   if (composer) composer.render();
   else renderer.render(scene, camera);
   requestAnimationFrame(frame);
+}
+
+function updateHome(dt) {
+  if (!homeNest || !player) {
+    if (homeIndicator) homeIndicator.classList.add('hidden');
+    if (compassEl) compassEl.classList.add('hidden');
+    return;
+  }
+  const dist = distanceToHome(homeNest, player.position);
+  const atHome = dist < HOME_RADIUS;
+
+  // Show home indicator + passive regen while inside the nest
+  if (atHome) {
+    homeIndicator.classList.remove('hidden');
+    compassEl.classList.add('hidden');
+    homeRegenAccum += dt * HOME_REGEN_RATE;
+    if (homeRegenAccum >= 1) {
+      const ticks = Math.floor(homeRegenAccum);
+      homeRegenAccum -= ticks;
+      // Grow gently while resting (skip stage-up celebration spam)
+      const prevStage = player.userData.stage;
+      player.userData.growth = Math.min(
+        MAX_GROWTH,
+        player.userData.growth + ticks
+      );
+      while (
+        player.userData.stage < 4 &&
+        player.userData.growth >= STAGE_THRESHOLD[player.userData.stage + 1]
+      ) {
+        player.userData.stage += 1;
+        applyPlayerScale();
+        showStageUp(player.userData.stage);
+        audio.stageUp();
+        if (player.userData.stage === 4) triggerWin();
+      }
+      updateHUD();
+    }
+  } else {
+    homeIndicator.classList.add('hidden');
+    homeRegenAccum = 0;
+    // Show the homeward compass when far enough away
+    if (dist > 30) {
+      compassEl.classList.remove('hidden');
+      const dx = homeNest.position.x - player.position.x;
+      const dz = homeNest.position.z - player.position.z;
+      // Camera looks toward -Z; compute relative bearing in screen space
+      const yaw = Math.atan2(dx, -dz);
+      compassArrow.style.transform = `rotate(${yaw}rad)`;
+      compassDist.textContent = Math.round(dist) + 'u';
+    } else {
+      compassEl.classList.add('hidden');
+    }
+  }
 }
 
 function updatePowerup(dt) {
@@ -697,7 +852,8 @@ function updatePlayer(dt) {
   const stage = player.userData.stage;
   const speedMult = player.userData.speedMult || 1.0;
   const powerSpeed = power.active === 'speed' ? 2.0 : 1.0;
-  const baseSpeed = (4 + stage * 0.8) * speedMult * powerSpeed;
+  const demonSpeed = gameSettings.speedDemon ? 2.0 : 1.0;
+  const baseSpeed = (4 + stage * 0.8) * speedMult * powerSpeed * demonSpeed;
   const mv = controls.move;
   const speed = Math.hypot(mv.x, mv.y);
   let moving = false;
@@ -847,7 +1003,8 @@ function handleEating(dt) {
   const playerScale = STAGE_SCALE[stage] * (player.userData.scaleMult || 1.0);
   const playerSize = playerScale * 1.5;
   const reachBoost = player.userData.chompTimer > 0 ? 1.5 : 1.0;
-  const growthMult = power.active === 'growth' ? 2.0 : 1.0;
+  const megaMult = gameSettings.megaFood ? 3.0 : 1.0;
+  const growthMult = (power.active === 'growth' ? 2.0 : 1.0) * megaMult;
   const apex = power.active === 'apex';
 
   // Plants
