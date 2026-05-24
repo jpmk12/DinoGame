@@ -245,6 +245,7 @@ const optSpeedCb = document.getElementById('opt-speed');
 const optMegaFoodCb = document.getElementById('opt-megafood');
 const homeIndicator = document.getElementById('home-indicator');
 const compassEl = document.getElementById('compass');
+const menuBtn = document.getElementById('menu-btn');
 const compassArrow = document.getElementById('compass-arrow');
 const compassDist = document.getElementById('compass-dist');
 
@@ -310,10 +311,26 @@ function startGame(species) {
   updateHUD();
   hudEl.classList.remove('hidden');
   touchControls.classList.remove('hidden');
+  menuBtn.classList.remove('hidden');
   titleScreen.classList.add('hidden');
   gameOverEl.classList.add('hidden');
   winScreen.classList.add('hidden');
 }
+
+// Return to the title screen so the player can change options.
+// Keeps the world rendered behind the title for a clean visual.
+function exitToMenu() {
+  gameRunning = false;
+  hudEl.classList.add('hidden');
+  touchControls.classList.add('hidden');
+  menuBtn.classList.add('hidden');
+  compassEl.classList.add('hidden');
+  homeIndicator.classList.add('hidden');
+  gameOverEl.classList.add('hidden');
+  winScreen.classList.add('hidden');
+  titleScreen.classList.remove('hidden');
+}
+menuBtn.addEventListener('click', exitToMenu);
 
 function updateInvincibleHUD() {
   if (gameSettings.invincible) invincibleIndicator.classList.remove('hidden');
