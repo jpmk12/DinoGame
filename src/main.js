@@ -201,6 +201,7 @@ const gameSettings = {
   invincible: false,
   speedDemon: false,
   megaFood: false,
+  godzilla: false,
 };
 let selectedLevelKey = 'lostWorld';
 let homeRegenAccum = 0;
@@ -243,6 +244,7 @@ const optGiantCb = document.getElementById('opt-giant');
 const optInvincibleCb = document.getElementById('opt-invincible');
 const optSpeedCb = document.getElementById('opt-speed');
 const optMegaFoodCb = document.getElementById('opt-megafood');
+const optGodzillaCb = document.getElementById('opt-godzilla');
 const homeIndicator = document.getElementById('home-indicator');
 const compassEl = document.getElementById('compass');
 const menuBtn = document.getElementById('menu-btn');
@@ -254,7 +256,8 @@ function applyPlayerScale() {
   const stage = player.userData.stage;
   const sm = player.userData.scaleMult || 1.0;
   const boost = power.active === 'growth' ? 1.15 : 1.0;
-  player.scale.setScalar(STAGE_SCALE[stage] * sm * boost);
+  const godzilla = gameSettings.godzilla ? 2.0 : 1.0;
+  player.scale.setScalar(STAGE_SCALE[stage] * sm * boost * godzilla);
 }
 
 function startGame(species) {
@@ -264,6 +267,7 @@ function startGame(species) {
   gameSettings.invincible = !!(optInvincibleCb && optInvincibleCb.checked);
   gameSettings.speedDemon = !!(optSpeedCb && optSpeedCb.checked);
   gameSettings.megaFood = !!(optMegaFoodCb && optMegaFoodCb.checked);
+  gameSettings.godzilla = !!(optGodzillaCb && optGodzillaCb.checked);
 
   // Rebuild world if the chosen level differs from the active one
   if (selectedLevelKey !== getLevelKey()) {
@@ -282,8 +286,8 @@ function startGame(species) {
   removeAllBabies();
 
   player = buildPlayer(species);
-  // Roam mode: jump straight to GIANT (stage 4). Otherwise normal hatchling start.
-  if (gameSettings.startGiant) {
+  // Roam / Godzilla: jump straight to GIANT (stage 4). Otherwise hatchling start.
+  if (gameSettings.startGiant || gameSettings.godzilla) {
     player.userData.stage = 4;
     player.userData.growth = STAGE_THRESHOLD[4];
   }
@@ -894,15 +898,17 @@ function updatePlayer(dt) {
 
   animateDino(player, dt, moving);
 
-  // Giant-stage footsteps: thump sound + dust + tiny camera shake
+  // Giant-stage footsteps: thump sound + dust + camera shake.
+  // Godzilla mode stomps harder and more often.
   if (moving && stage >= 3) {
     stepThumpTimer -= dt;
     if (stepThumpTimer <= 0) {
-      const interval = stage >= 4 ? 0.5 : 0.65;
-      stepThumpTimer = interval;
+      const godzilla = gameSettings.godzilla;
+      stepThumpTimer = godzilla ? 0.4 : (stage >= 4 ? 0.5 : 0.65);
       audio.step();
       particles.dust(player.position);
-      if (stage >= 4) shake = Math.max(shake, 0.12);
+      if (godzilla) shake = Math.max(shake, 0.4);
+      else if (stage >= 4) shake = Math.max(shake, 0.12);
     }
   }
 
@@ -922,8 +928,9 @@ const _tmpA = new THREE.Vector3();
 
 function updateEntities(dt) {
   const playerStage = player.userData.stage;
-  const playerScale =
-    STAGE_SCALE[playerStage] * (player.userData.scaleMult || 1.0);
+  // Use the actual rendered scale so all multipliers (scaleMult, growth
+  // boost, Godzilla) factor into predator/prey behavior.
+  const playerScale = player.scale.x;
 
   for (const ent of entities.children) {
     const d = ent.userData;
@@ -1017,7 +1024,7 @@ function updateEntities(dt) {
 
 function handleEating(dt) {
   const stage = player.userData.stage;
-  const playerScale = STAGE_SCALE[stage] * (player.userData.scaleMult || 1.0);
+  const playerScale = player.scale.x; // actual rendered scale (incl. Godzilla)
   const playerSize = playerScale * 1.5;
   const reachBoost = player.userData.chompTimer > 0 ? 1.5 : 1.0;
   const megaMult = gameSettings.megaFood ? 3.0 : 1.0;
@@ -1159,8 +1166,10 @@ function updateCamera(dt) {
   // Chase cam: behind and above the player. Height tracks terrain so the
   // camera stays the right distance off the ground when on hills or valleys.
   const stage = player.userData.stage;
-  const heightOffset = 8 + stage * 1.5;
-  const backOffset = 10 + stage * 2;
+  // Pull the camera back for a bigger player so the whole beast stays in frame.
+  const sizeBoost = gameSettings.godzilla ? 2.2 : 1.0;
+  const heightOffset = (8 + stage * 1.5) * sizeBoost;
+  const backOffset = (10 + stage * 2) * sizeBoost;
   const targetX = player.position.x;
   const targetZ = player.position.z + backOffset;
   const targetY = player.position.y + heightOffset;
