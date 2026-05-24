@@ -59,9 +59,9 @@ export const LEVELS = {
     weather: 'snow',
   },
 
-  islaNublar: {
-    key: 'islaNublar',
-    name: 'Isla Nublar',
+  dinoPark: {
+    key: 'dinoPark',
+    name: 'Dino Park',
     desc: 'Tropical jungle island',
     icon: '🏝️',
     biomeColors: {
@@ -79,7 +79,7 @@ export const LEVELS = {
     tropicalTrees: true,         // jungle trees use palms; ferns spawn as ground cover
     mountainColor: 0x5a5048,     // darker basalt for the volcanic peak
     vehicles: true,              // park ranger jeeps patrol this level
-    centerPeak: {                // Mt. Sibo — visible iconic volcano
+    centerPeak: {                // a visible iconic volcano peak
       x: -55, z: -55,
       radius: 38,
       height: 42,

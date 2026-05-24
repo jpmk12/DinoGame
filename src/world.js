@@ -38,7 +38,7 @@ export function getHeightAt(x, z) {
     h += edgeDist * edgeDist * 0.04;
   }
 
-  // Per-level central peak (e.g. Mt. Sibo on Isla Nublar)
+  // Per-level central peak (e.g. the volcano on Dino Park)
   const level = getLevel();
   const peak = level && level.centerPeak;
   if (peak) {

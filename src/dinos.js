@@ -28,6 +28,136 @@ function eye(parent, x, y, z) {
 }
 
 /**
+ * Build a Kaiju — a Godzilla-inspired city-stomping titan. Upright biped
+ * with glowing jagged dorsal plates down the back and tail. Faces -Z.
+ */
+export function buildKaiju(color = 0x3a4a44) {
+  const root = new THREE.Group();
+  const belly = 0x6a7a70;
+  const plateMat = new THREE.MeshLambertMaterial({
+    color: 0xbfe6ff,
+    emissive: 0x66bbff,
+    emissiveIntensity: 0.9, // bright enough to catch the bloom pass
+  });
+
+  // Upright torso (taller than a T-Rex, more vertical)
+  const torso = box(1.0, 1.3, 0.95, color);
+  torso.position.set(0, 1.5, -0.1);
+  torso.rotation.x = -0.15;
+  root.add(torso);
+  const chest = box(0.85, 0.7, 0.85, belly);
+  chest.position.set(0, 1.45, -0.45);
+  chest.rotation.x = -0.15;
+  root.add(chest);
+
+  // Hips
+  const hips = box(0.95, 0.8, 0.9, color);
+  hips.position.set(0, 0.95, 0.1);
+  root.add(hips);
+
+  // Thick tail — three tapering segments sweeping back and down
+  const tail1 = box(0.55, 0.55, 0.8, color);
+  tail1.position.set(0, 0.8, 0.85);
+  tail1.rotation.x = 0.3;
+  root.add(tail1);
+  const tail2 = box(0.38, 0.4, 0.75, color);
+  tail2.position.set(0, 0.55, 1.5);
+  tail2.rotation.x = 0.55;
+  root.add(tail2);
+  const tail3 = box(0.2, 0.22, 0.6, color);
+  tail3.position.set(0, 0.28, 2.0);
+  tail3.rotation.x = 0.7;
+  root.add(tail3);
+
+  // Neck + head held high
+  const neck = box(0.45, 0.55, 0.45, color);
+  neck.position.set(0, 2.2, -0.45);
+  root.add(neck);
+
+  const head = new THREE.Group();
+  head.position.set(0, 2.55, -0.6);
+  const skull = box(0.55, 0.5, 0.75, color);
+  head.add(skull);
+  const jaw = box(0.5, 0.16, 0.62, 0x2a3a34);
+  jaw.position.set(0, -0.28, -0.05);
+  head.add(jaw);
+  // Teeth
+  for (let i = -1; i <= 1; i++) {
+    const tooth = box(0.06, 0.13, 0.06, 0xfff8dc);
+    tooth.position.set(i * 0.15, -0.16, -0.28);
+    head.add(tooth);
+  }
+  // Glowing eyes
+  for (const x of [-0.16, 0.16]) {
+    const eyeGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0xffee88, emissive: 0xffdd44, emissiveIntensity: 0.8 })
+    );
+    eyeGlow.position.set(x, 0.1, -0.32);
+    head.add(eyeGlow);
+  }
+  // Small head spines/ears
+  for (const x of [-0.2, 0.2]) {
+    const fin = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 4), plateMat);
+    fin.position.set(x, 0.28, 0.1);
+    head.add(fin);
+  }
+  root.add(head);
+
+  // Dorsal plates: jagged glowing fins from the neck, down the back, to
+  // the tail tip. Each is a flattened 4-sided cone (maple-leaf-ish).
+  const spinePath = [
+    [2.0, -0.45, 0.55], [1.85, -0.3, 0.7], [1.7, -0.1, 0.8],
+    [1.55, 0.15, 0.85], [1.4, 0.5, 0.85], [1.25, 0.85, 0.75],
+    [1.0, 1.0, 0.6], [0.75, 1.4, 0.5], [0.5, 1.85, 0.35],
+    [0.28, 2.0, 0.22],
+  ];
+  for (const [y, z, size] of spinePath) {
+    const plate = new THREE.Mesh(new THREE.ConeGeometry(size * 0.45, size, 4), plateMat);
+    plate.scale.z = 0.35; // flatten front-to-back into a fin
+    plate.position.set(0, y + size * 0.4, z);
+    plate.rotation.y = Math.PI / 4;
+    plate.castShadow = true;
+    root.add(plate);
+  }
+
+  // Stubby but visible arms with claws
+  for (const side of [-1, 1]) {
+    const arm = box(0.16, 0.5, 0.18, color);
+    arm.position.set(side * 0.6, 1.45, -0.5);
+    arm.rotation.z = side * 0.3;
+    root.add(arm);
+    const forearm = box(0.13, 0.35, 0.15, color);
+    forearm.position.set(side * 0.72, 1.15, -0.62);
+    root.add(forearm);
+  }
+
+  // Powerful legs (animated)
+  const legL = new THREE.Group();
+  legL.position.set(-0.32, 0.95, 0.1);
+  const legLMesh = box(0.34, 1.0, 0.42, color);
+  legLMesh.position.y = -0.45;
+  legL.add(legLMesh);
+  const footL = box(0.4, 0.2, 0.6, color);
+  footL.position.set(0, -0.95, -0.1);
+  legL.add(footL);
+  root.add(legL);
+
+  const legR = new THREE.Group();
+  legR.position.set(0.32, 0.95, 0.1);
+  const legRMesh = box(0.34, 1.0, 0.42, color);
+  legRMesh.position.y = -0.45;
+  legR.add(legRMesh);
+  const footR = box(0.4, 0.2, 0.6, color);
+  footR.position.set(0, -0.95, -0.1);
+  legR.add(footR);
+  root.add(legR);
+
+  root.userData.parts = { head, tail2, tail3, legL, legR, jaw };
+  return root;
+}
+
+/**
  * Build a T-Rex.
  * Orientation: faces -Z (forward). Pivot at feet center.
  */
@@ -940,6 +1070,17 @@ export const SPECIES = {
     modelFile: 'Tyrannosaurus.glb',
     speedMult: 1.0,
     scaleMult: 1.0,
+    diet: 'carnivore',
+    playable: true,
+  },
+  kaiju: {
+    name: 'Kaiju',
+    desc: 'City-stomping titan',
+    color: 0x3a4a44,
+    build: buildKaiju,
+    modelFile: null,
+    speedMult: 0.85,
+    scaleMult: 1.25,
     diet: 'carnivore',
     playable: true,
   },

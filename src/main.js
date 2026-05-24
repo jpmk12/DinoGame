@@ -194,7 +194,7 @@ let entities = null;     // Group of enemies + critters
 let berries = null;      // Group of power-up berries
 let eggs = null;         // Group of egg nests
 let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
-let vehicles = null;     // Group of ranger jeeps (Jurassic Park levels only)
+let vehicles = null;     // Group of ranger jeeps (Dino Park levels only)
 let babies = [];         // active baby dinos (THREE.Group instances)
 
 // Title-screen game options — read at startGame.
@@ -1079,7 +1079,7 @@ function handleEating(dt) {
     }
   }
 
-  // Ranger jeeps — chomp for big points (Jurassic Park levels)
+  // Ranger jeeps — chomp for big points (Dino Park levels)
   if (vehicles) {
     for (let i = vehicles.children.length - 1; i >= 0; i--) {
       const v = vehicles.children[i];

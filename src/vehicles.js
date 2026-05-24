@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, PLAYABLE_RADIUS, getHeightAt } from './world.js';
 
-// Park ranger jeeps (Jurassic Park style) that patrol the level and flee
+// Park ranger jeeps (safari style) that patrol the level and flee
 // from the player — the classic "must go faster" chase. Chomp one for points.
 
 const FLAT = (c) => new THREE.MeshLambertMaterial({ color: c });
