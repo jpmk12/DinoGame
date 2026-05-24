@@ -28,10 +28,10 @@ function eye(parent, x, y, z) {
 }
 
 /**
- * Build a Kaiju — a Godzilla-inspired city-stomping titan. Upright biped
- * with glowing jagged dorsal plates down the back and tail. Faces -Z.
+ * Build a Titan — a colossal city-stomping monster. Upright biped with
+ * glowing jagged dorsal plates down the back and tail. Faces -Z.
  */
-export function buildKaiju(color = 0x3a4a44) {
+export function buildTitan(color = 0x3a4a44) {
   const root = new THREE.Group();
   const belly = 0x6a7a70;
   const plateMat = new THREE.MeshLambertMaterial({
@@ -1075,11 +1075,11 @@ export const SPECIES = {
     diet: 'carnivore',
     playable: true,
   },
-  kaiju: {
-    name: 'Kaiju',
-    desc: 'City-stomping titan',
+  titan: {
+    name: 'Titan',
+    desc: 'City-stomping monster',
     color: 0x3a4a44,
-    build: buildKaiju,
+    build: buildTitan,
     modelFile: null,
     speedMult: 0.85,
     scaleMult: 1.25,

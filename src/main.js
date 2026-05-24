@@ -203,7 +203,7 @@ const gameSettings = {
   invincible: false,
   speedDemon: false,
   megaFood: false,
-  godzilla: false,
+  mega: false,
 };
 let selectedLevelKey = 'lostWorld';
 let homeRegenAccum = 0;
@@ -219,7 +219,7 @@ const power = {
   timeLeft: 0,
 };
 
-// Kaiju Plasma Breath state
+// Titan Plasma Breath state
 const PLASMA_COOLDOWN = 3;   // seconds between blasts
 let plasmaCooldown = 0;
 let plateFlash = 0;          // glow boost on the dorsal plates when firing
@@ -253,7 +253,7 @@ const optGiantCb = document.getElementById('opt-giant');
 const optInvincibleCb = document.getElementById('opt-invincible');
 const optSpeedCb = document.getElementById('opt-speed');
 const optMegaFoodCb = document.getElementById('opt-megafood');
-const optGodzillaCb = document.getElementById('opt-godzilla');
+const optMegaCb = document.getElementById('opt-mega');
 const homeIndicator = document.getElementById('home-indicator');
 const compassEl = document.getElementById('compass');
 const menuBtn = document.getElementById('menu-btn');
@@ -266,8 +266,8 @@ function applyPlayerScale() {
   const stage = player.userData.stage;
   const sm = player.userData.scaleMult || 1.0;
   const boost = power.active === 'growth' ? 1.15 : 1.0;
-  const godzilla = gameSettings.godzilla ? 2.0 : 1.0;
-  player.scale.setScalar(STAGE_SCALE[stage] * sm * boost * godzilla);
+  const mega = gameSettings.mega ? 2.0 : 1.0;
+  player.scale.setScalar(STAGE_SCALE[stage] * sm * boost * mega);
 }
 
 function startGame(species) {
@@ -277,7 +277,7 @@ function startGame(species) {
   gameSettings.invincible = !!(optInvincibleCb && optInvincibleCb.checked);
   gameSettings.speedDemon = !!(optSpeedCb && optSpeedCb.checked);
   gameSettings.megaFood = !!(optMegaFoodCb && optMegaFoodCb.checked);
-  gameSettings.godzilla = !!(optGodzillaCb && optGodzillaCb.checked);
+  gameSettings.mega = !!(optMegaCb && optMegaCb.checked);
 
   // Rebuild world if the chosen level differs from the active one
   if (selectedLevelKey !== getLevelKey()) {
@@ -297,8 +297,8 @@ function startGame(species) {
   removeAllBabies();
 
   player = buildPlayer(species);
-  // Roam / Godzilla: jump straight to GIANT (stage 4). Otherwise hatchling start.
-  if (gameSettings.startGiant || gameSettings.godzilla) {
+  // Roam / Mega: jump straight to GIANT (stage 4). Otherwise hatchling start.
+  if (gameSettings.startGiant || gameSettings.mega) {
     player.userData.stage = 4;
     player.userData.growth = STAGE_THRESHOLD[4];
   }
@@ -323,8 +323,8 @@ function startGame(species) {
   hideBabyIndicator();
   hideEggPrompt();
   updateInvincibleHUD();
-  // Plasma Breath button only for the Kaiju
-  if (species === 'kaiju') {
+  // Plasma Breath button only for the Titan
+  if (species === 'titan') {
     blastBtn.classList.remove('hidden', 'cooldown');
   } else {
     blastBtn.classList.add('hidden');
@@ -882,7 +882,7 @@ function updateHome(dt) {
   }
 }
 
-// ---------------- Kaiju Plasma Breath ----------------
+// ---------------- Titan Plasma Breath ----------------
 function clearBeam() {
   if (beamMesh) {
     scene.remove(beamMesh);
@@ -975,7 +975,7 @@ function firePlasmaBreath() {
   blastBtn.classList.add('cooldown');
   // Beam fires after the charge sweep, synced with the sound
   setTimeout(() => {
-    if (!gameRunning || !player || player.userData.species !== 'kaiju') return;
+    if (!gameRunning || !player || player.userData.species !== 'titan') return;
     const yaw = player.rotation.y;
     const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const scale = player.scale.x;
@@ -990,7 +990,7 @@ function firePlasmaBreath() {
 }
 
 function updatePlasma(dt) {
-  const isKaiju = player.userData.species === 'kaiju';
+  const isTitan = player.userData.species === 'titan';
 
   if (plasmaCooldown > 0) {
     plasmaCooldown -= dt;
@@ -1000,7 +1000,7 @@ function updatePlasma(dt) {
     }
   }
 
-  if (isKaiju && controls.blastPressed && plasmaCooldown <= 0) {
+  if (isTitan && controls.blastPressed && plasmaCooldown <= 0) {
     firePlasmaBreath();
   }
 
@@ -1064,15 +1064,15 @@ function updatePlayer(dt) {
   animateDino(player, dt, moving);
 
   // Giant-stage footsteps: thump sound + dust + camera shake.
-  // Godzilla mode stomps harder and more often.
+  // Mega Mode stomps harder and more often.
   if (moving && stage >= 3) {
     stepThumpTimer -= dt;
     if (stepThumpTimer <= 0) {
-      const godzilla = gameSettings.godzilla;
-      stepThumpTimer = godzilla ? 0.4 : (stage >= 4 ? 0.5 : 0.65);
+      const mega = gameSettings.mega;
+      stepThumpTimer = mega ? 0.4 : (stage >= 4 ? 0.5 : 0.65);
       audio.step();
       particles.dust(player.position);
-      if (godzilla) shake = Math.max(shake, 0.4);
+      if (mega) shake = Math.max(shake, 0.4);
       else if (stage >= 4) shake = Math.max(shake, 0.12);
     }
   }
@@ -1094,7 +1094,7 @@ const _tmpA = new THREE.Vector3();
 function updateEntities(dt) {
   const playerStage = player.userData.stage;
   // Use the actual rendered scale so all multipliers (scaleMult, growth
-  // boost, Godzilla) factor into predator/prey behavior.
+  // boost, Mega Mode) factor into predator/prey behavior.
   const playerScale = player.scale.x;
 
   for (const ent of entities.children) {
@@ -1189,7 +1189,7 @@ function updateEntities(dt) {
 
 function handleEating(dt) {
   const stage = player.userData.stage;
-  const playerScale = player.scale.x; // actual rendered scale (incl. Godzilla)
+  const playerScale = player.scale.x; // actual rendered scale (incl. Mega Mode)
   const playerSize = playerScale * 1.5;
   const reachBoost = player.userData.chompTimer > 0 ? 1.5 : 1.0;
   const megaMult = gameSettings.megaFood ? 3.0 : 1.0;
@@ -1353,7 +1353,7 @@ function updateCamera(dt) {
   // camera stays the right distance off the ground when on hills or valleys.
   const stage = player.userData.stage;
   // Pull the camera back for a bigger player so the whole beast stays in frame.
-  const sizeBoost = gameSettings.godzilla ? 2.2 : 1.0;
+  const sizeBoost = gameSettings.mega ? 2.2 : 1.0;
   const heightOffset = (8 + stage * 1.5) * sizeBoost;
   const backOffset = (10 + stage * 2) * sizeBoost;
   const targetX = player.position.x;
