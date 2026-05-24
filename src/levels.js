@@ -78,6 +78,7 @@ export const LEVELS = {
     weather: 'rain',
     tropicalTrees: true,         // jungle trees use palms; ferns spawn as ground cover
     mountainColor: 0x5a5048,     // darker basalt for the volcanic peak
+    vehicles: true,              // park ranger jeeps patrol this level
     centerPeak: {                // Mt. Sibo — visible iconic volcano
       x: -55, z: -55,
       radius: 38,

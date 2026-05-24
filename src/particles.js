@@ -137,6 +137,18 @@ export class ParticleSystem {
     });
   }
 
+  debris(position) {
+    // Metal/glass chunks + a puff of dark smoke for chomped vehicles
+    this.burst(position, {
+      count: 14, colors: [0x6a7a4a, 0x888888, 0xb03a2a, 0x444444],
+      size: 0.2, speed: 6, life: 1.1, gravity: -14,
+    });
+    this.burst(position, {
+      count: 8, colors: [0x555555, 0x777777, 0x333333],
+      size: 0.3, speed: 2.5, life: 1.4, gravity: -1.5, upBias: 0.8,
+    });
+  }
+
   watermelon(position) {
     // Pink/red flesh + green rind chunks
     this.burst(position, {

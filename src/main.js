@@ -41,6 +41,7 @@ import {
   BABY_EAT_RADIUS,
 } from './eggs.js';
 import { spawnFoods, spawnFood, animateFoods } from './foods.js';
+import { spawnVehicles, spawnVehicle, animateVehicles } from './vehicles.js';
 import { LEVELS, LEVEL_KEYS, setLevelKey, getLevel, getLevelKey } from './levels.js';
 import { WeatherSystem } from './weather.js';
 import {
@@ -193,6 +194,7 @@ let entities = null;     // Group of enemies + critters
 let berries = null;      // Group of power-up berries
 let eggs = null;         // Group of egg nests
 let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
+let vehicles = null;     // Group of ranger jeeps (Jurassic Park levels only)
 let babies = [];         // active baby dinos (THREE.Group instances)
 
 // Title-screen game options — read at startGame.
@@ -282,6 +284,7 @@ function startGame(species) {
   if (berries) scene.remove(berries);
   if (eggs) scene.remove(eggs);
   if (foods) scene.remove(foods);
+  if (vehicles) scene.remove(vehicles);
   if (homeNest) scene.remove(homeNest);
   removeAllBabies();
 
@@ -299,6 +302,7 @@ function startGame(species) {
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
   foods = spawnFoods(scene, player.position);
+  vehicles = getLevel().vehicles ? spawnVehicles(scene, player.position, 4) : null;
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
   score = 0;
@@ -405,6 +409,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   if (berries) scene.remove(berries);
   if (eggs) scene.remove(eggs);
   if (foods) scene.remove(foods);
+  if (vehicles) scene.remove(vehicles);
   if (homeNest) scene.remove(homeNest);
   removeAllBabies();
   player = buildPlayer(species);
@@ -417,6 +422,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
   foods = spawnFoods(scene, player.position);
+  vehicles = getLevel().vehicles ? spawnVehicles(scene, player.position, 4) : null;
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
   power.active = null;
@@ -782,6 +788,7 @@ function frame() {
     if (berries) animateBerries(berries, dt);
     if (eggs) animateEggs(eggs, dt);
     if (foods) animateFoods(foods, dt);
+    if (vehicles && animateVehicles(vehicles, dt, player.position)) audio.carHonk();
     if (homeNest) animateNest(homeNest, dt);
     updatePowerup(dt);
     updateHome(dt);
@@ -1068,6 +1075,27 @@ function handleEating(dt) {
         score += f.userData.score || 1;
         // Respawn the same food type elsewhere to keep biome variety stable
         spawnFood(foods, player.position, ft);
+      }
+    }
+  }
+
+  // Ranger jeeps — chomp for big points (Jurassic Park levels)
+  if (vehicles) {
+    for (let i = vehicles.children.length - 1; i >= 0; i--) {
+      const v = vehicles.children[i];
+      const d = v.position.distanceTo(player.position);
+      if (d < (playerSize + v.userData.size) * 0.7 * reachBoost) {
+        particles.debris(v.position);
+        audio.crunchMetal();
+        shake = Math.max(shake, 0.3);
+        vehicles.remove(v);
+        addGrowth((v.userData.nutrition || 1) * growthMult);
+        score += v.userData.score || 25;
+        showFact('You chomped a ranger jeep! +' + (v.userData.score || 25));
+        // A replacement jeep drives in after a short delay
+        setTimeout(() => {
+          if (gameRunning && vehicles) spawnVehicle(vehicles, player.position);
+        }, 5000);
       }
     }
   }

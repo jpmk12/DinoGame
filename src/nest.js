@@ -54,45 +54,45 @@ export function buildHomeNest(scene) {
   inner.position.y = 0.2;
   root.add(inner);
 
-  // Central totem — wooden post with a stone on top
+  // Totem — wooden post with a stone on top. Placed on the RIM (not the
+  // center) so it never pierces the dinosaur resting in the nest. Shorter
+  // than before for the same reason.
   const totem = new THREE.Group();
+  totem.position.set(2.9, 0, 2.9); // back-corner of the stone ring
   const post = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.15, 1.6, 8),
+    new THREE.CylinderGeometry(0.12, 0.15, 1.2, 8),
     FLAT(0x6a4422)
   );
-  post.position.y = 0.95;
+  post.position.y = 0.7;
   post.castShadow = true;
   totem.add(post);
-  // Carved markings (stacked horizontal bars)
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     const mark = new THREE.Mesh(
       new THREE.BoxGeometry(0.28, 0.05, 0.28),
       FLAT(0x3a2a14)
     );
-    mark.position.y = 0.4 + i * 0.4;
+    mark.position.y = 0.45 + i * 0.4;
     totem.add(mark);
   }
-  // Stone hat
   const hat = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(0.28, 0),
+    new THREE.DodecahedronGeometry(0.26, 0),
     FLAT(0x888080)
   );
-  hat.position.y = 1.85;
+  hat.position.y = 1.4;
   hat.castShadow = true;
   totem.add(hat);
-  // Two feathers sticking out
   for (const side of [-1, 1]) {
     const feather = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 0.5, 0.16),
+      new THREE.BoxGeometry(0.06, 0.45, 0.16),
       FLAT(side > 0 ? 0xcc6644 : 0x4488cc)
     );
-    feather.position.set(side * 0.16, 1.85, 0);
+    feather.position.set(side * 0.15, 1.45, 0);
     feather.rotation.z = side * 0.4;
     totem.add(feather);
   }
   root.add(totem);
 
-  // Small pile of decorative eggs in the nest
+  // Decorative eggs clustered against the rim (out of the dino's footprint)
   const eggMat = new THREE.MeshLambertMaterial({
     color: 0xfff4d0,
     emissive: 0xffeacc,
@@ -102,12 +102,9 @@ export function buildHomeNest(scene) {
     const eg = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), eggMat);
     eg.scale.y = 1.4;
     const ang = Math.random() * Math.PI * 2;
-    const r = 0.6 + Math.random() * 0.4;
-    eg.position.set(
-      Math.cos(ang) * r,
-      0.32,
-      Math.sin(ang) * r + 0.8
-    );
+    // Sit them out near the stone ring, away from the center resting spot
+    const r = 2.4 + Math.random() * 0.5;
+    eg.position.set(Math.cos(ang) * r, 0.32, Math.sin(ang) * r);
     eg.rotation.z = (Math.random() - 0.5) * 0.4;
     eg.castShadow = true;
     root.add(eg);

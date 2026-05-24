@@ -164,6 +164,19 @@ class AudioManager {
     this._tone(base, 0.07, 'triangle', 0.13, 1.6);
     setTimeout(() => this._tone(base * 1.4, 0.05, 'triangle', 0.1), 70);
   }
+
+  carHonk() {
+    // Two-tone panicked honk
+    this._tone(420, 0.12, 'square', 0.15);
+    setTimeout(() => this._tone(360, 0.16, 'square', 0.15), 130);
+  }
+
+  crunchMetal() {
+    // Harsh metallic crunch: bright noise + a low crumple tone
+    this._noise(0.22, 0.35, 4000, 'highpass');
+    this._noise(0.18, 0.3, 700);
+    this._tone(90, 0.25, 'sawtooth', 0.28, 0.4);
+  }
 }
 
 export const audio = new AudioManager();
