@@ -177,6 +177,17 @@ class AudioManager {
     this._noise(0.18, 0.3, 700);
     this._tone(90, 0.25, 'sawtooth', 0.28, 0.4);
   }
+
+  plasmaBreath() {
+    // Rising charge whine, then a roaring energy beam blast.
+    this._tone(180, 0.3, 'sawtooth', 0.18, 4.0); // charge sweep up
+    setTimeout(() => {
+      // Beam: layered noise + descending growl
+      this._noise(0.5, 0.32, 2200, 'bandpass');
+      this._tone(320, 0.5, 'sawtooth', 0.3, 0.4);
+      this._tone(140, 0.55, 'square', 0.22, 0.5);
+    }, 280);
+  }
 }
 
 export const audio = new AudioManager();

@@ -219,6 +219,13 @@ const power = {
   timeLeft: 0,
 };
 
+// Kaiju Plasma Breath state
+const PLASMA_COOLDOWN = 3;   // seconds between blasts
+let plasmaCooldown = 0;
+let plateFlash = 0;          // glow boost on the dorsal plates when firing
+let beamMesh = null;         // active beam visual
+let beamLife = 0;
+
 // HUD elements
 const hudEl = document.getElementById('hud');
 const stageLabel = document.getElementById('stage-label');
@@ -250,6 +257,7 @@ const optGodzillaCb = document.getElementById('opt-godzilla');
 const homeIndicator = document.getElementById('home-indicator');
 const compassEl = document.getElementById('compass');
 const menuBtn = document.getElementById('menu-btn');
+const blastBtn = document.getElementById('blast-btn');
 const compassArrow = document.getElementById('compass-arrow');
 const compassDist = document.getElementById('compass-dist');
 
@@ -309,10 +317,18 @@ function startGame(species) {
   hasWon = gameSettings.startGiant; // skip win celebration if you started there
   power.active = null;
   power.timeLeft = 0;
+  plasmaCooldown = 0;
+  clearBeam();
   updatePowerupHUD();
   hideBabyIndicator();
   hideEggPrompt();
   updateInvincibleHUD();
+  // Plasma Breath button only for the Kaiju
+  if (species === 'kaiju') {
+    blastBtn.classList.remove('hidden', 'cooldown');
+  } else {
+    blastBtn.classList.add('hidden');
+  }
   resetFacts();
   gameRunning = true;
 
@@ -332,11 +348,13 @@ function exitToMenu() {
   hudEl.classList.add('hidden');
   touchControls.classList.add('hidden');
   menuBtn.classList.add('hidden');
+  blastBtn.classList.add('hidden');
   compassEl.classList.add('hidden');
   homeIndicator.classList.add('hidden');
   gameOverEl.classList.add('hidden');
   winScreen.classList.add('hidden');
   titleScreen.classList.remove('hidden');
+  clearBeam();
 }
 menuBtn.addEventListener('click', exitToMenu);
 
@@ -791,6 +809,7 @@ function frame() {
     if (vehicles && animateVehicles(vehicles, dt, player.position)) audio.carHonk();
     if (homeNest) animateNest(homeNest, dt);
     updatePowerup(dt);
+    updatePlasma(dt);
     updateHome(dt);
     handleEggInteraction();
     handleEating(dt);
@@ -860,6 +879,145 @@ function updateHome(dt) {
     } else {
       compassEl.classList.add('hidden');
     }
+  }
+}
+
+// ---------------- Kaiju Plasma Breath ----------------
+function clearBeam() {
+  if (beamMesh) {
+    scene.remove(beamMesh);
+    if (beamMesh.geometry) beamMesh.geometry.dispose();
+    if (beamMesh.material) beamMesh.material.dispose();
+    beamMesh = null;
+  }
+  beamLife = 0;
+}
+
+function spawnBeam(origin, fwd, scale) {
+  clearBeam();
+  const length = 20 + scale * 6;
+  const geo = new THREE.CylinderGeometry(0.7 * scale, 0.22 * scale, length, 14, 1, true);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x9fe4ff,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  // Cylinder runs along +Y by default — rotate so +Y aligns with fwd.
+  mesh.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    fwd.clone().normalize()
+  );
+  mesh.position.copy(origin).add(fwd.clone().multiplyScalar(length / 2));
+  mesh.renderOrder = 2;
+  scene.add(mesh);
+  beamMesh = mesh;
+  beamLife = 0.4;
+  // Sparkle burst at the muzzle
+  particles.sparkles(origin);
+}
+
+function consumeInCone(origin, fwd, range, coneCos) {
+  const apex = true; // beam vaporizes anything regardless of size
+  const eat = (group, handler) => {
+    if (!group) return;
+    for (let i = group.children.length - 1; i >= 0; i--) {
+      const obj = group.children[i];
+      const to = _tmpA.copy(obj.position).sub(origin);
+      const dist = to.length();
+      if (dist > range || dist < 0.001) continue;
+      to.multiplyScalar(1 / dist);
+      if (to.dot(fwd) < coneCos) continue;
+      handler(obj);
+    }
+  };
+
+  eat(entities, (ent) => {
+    particles.meat(ent.position);
+    entities.remove(ent);
+    addGrowth(ent.userData.nutrition || 2);
+    if (ent.userData.kind === 'enemy') {
+      score += 10 + ent.userData.stage * 5;
+      spawnEnemy(entities, player.position, player.userData.stage);
+    } else {
+      score += 3;
+      spawnCritter(entities, player.position);
+    }
+  });
+
+  eat(foods, (f) => {
+    const pType = f.userData.particleType || 'leaves';
+    if (particles[pType]) particles[pType](f.position);
+    foods.remove(f);
+    addGrowth(f.userData.nutrition || 1);
+    score += f.userData.score || 1;
+    spawnFood(foods, player.position, f.userData.foodType);
+  });
+
+  eat(vehicles, (v) => {
+    particles.debris(v.position);
+    vehicles.remove(v);
+    addGrowth(v.userData.nutrition || 3);
+    score += v.userData.score || 25;
+    setTimeout(() => {
+      if (gameRunning && vehicles) spawnVehicle(vehicles, player.position);
+    }, 5000);
+  });
+}
+
+function firePlasmaBreath() {
+  audio.plasmaBreath();
+  plateFlash = 0.6;
+  plasmaCooldown = PLASMA_COOLDOWN;
+  blastBtn.classList.add('cooldown');
+  // Beam fires after the charge sweep, synced with the sound
+  setTimeout(() => {
+    if (!gameRunning || !player || player.userData.species !== 'kaiju') return;
+    const yaw = player.rotation.y;
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const scale = player.scale.x;
+    const mouth = player.position.clone();
+    mouth.y += 2.4 * scale;
+    mouth.add(fwd.clone().multiplyScalar(scale));
+    spawnBeam(mouth, fwd, scale);
+    shake = Math.max(shake, 0.4);
+    const range = 20 + scale * 6;
+    consumeInCone(mouth, fwd, range, Math.cos(0.5));
+  }, 280);
+}
+
+function updatePlasma(dt) {
+  const isKaiju = player.userData.species === 'kaiju';
+
+  if (plasmaCooldown > 0) {
+    plasmaCooldown -= dt;
+    if (plasmaCooldown <= 0) {
+      plasmaCooldown = 0;
+      blastBtn.classList.remove('cooldown');
+    }
+  }
+
+  if (isKaiju && controls.blastPressed && plasmaCooldown <= 0) {
+    firePlasmaBreath();
+  }
+
+  // Dorsal plate glow flares while firing, then settles
+  if (plateFlash > 0) {
+    plateFlash = Math.max(0, plateFlash - dt);
+    const plates = player.userData.parts && player.userData.parts.plates;
+    if (plates && plates[0]) {
+      plates[0].material.emissiveIntensity = 0.9 + plateFlash * 5;
+    }
+  }
+
+  // Fade out the beam
+  if (beamMesh) {
+    beamLife -= dt;
+    beamMesh.material.opacity = Math.max(0, beamLife / 0.4) * 0.85;
+    if (beamLife <= 0) clearBeam();
   }
 }
 

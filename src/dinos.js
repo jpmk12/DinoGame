@@ -112,6 +112,7 @@ export function buildKaiju(color = 0x3a4a44) {
     [1.0, 1.0, 0.6], [0.75, 1.4, 0.5], [0.5, 1.85, 0.35],
     [0.28, 2.0, 0.22],
   ];
+  const plates = [];
   for (const [y, z, size] of spinePath) {
     const plate = new THREE.Mesh(new THREE.ConeGeometry(size * 0.45, size, 4), plateMat);
     plate.scale.z = 0.35; // flatten front-to-back into a fin
@@ -119,6 +120,7 @@ export function buildKaiju(color = 0x3a4a44) {
     plate.rotation.y = Math.PI / 4;
     plate.castShadow = true;
     root.add(plate);
+    plates.push(plate);
   }
 
   // Stubby but visible arms with claws
@@ -153,7 +155,7 @@ export function buildKaiju(color = 0x3a4a44) {
   legR.add(footR);
   root.add(legR);
 
-  root.userData.parts = { head, tail2, tail3, legL, legR, jaw };
+  root.userData.parts = { head, tail2, tail3, legL, legR, jaw, plates };
   return root;
 }
 

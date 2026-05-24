@@ -5,6 +5,8 @@ export class Controls {
     this.move = { x: 0, y: 0 }; // -1..1
     this.chompPressed = false;  // edge: true for one frame after press
     this._chompFlag = false;
+    this.blastPressed = false;  // edge: true for one frame after press
+    this._blastFlag = false;
 
     // Keyboard state
     this.keys = new Set();
@@ -14,11 +16,16 @@ export class Controls {
         this._chompFlag = true;
         e.preventDefault();
       }
+      if (e.code === 'KeyB' || e.code === 'KeyF') {
+        this._blastFlag = true;
+        e.preventDefault();
+      }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
 
     this._setupJoystick();
     this._setupChompBtn();
+    this._setupBlastBtn();
   }
 
   _setupJoystick() {
@@ -94,6 +101,17 @@ export class Controls {
     btn.addEventListener('mousedown', fire);
   }
 
+  _setupBlastBtn() {
+    const btn = document.getElementById('blast-btn');
+    if (!btn) return;
+    const fire = (e) => {
+      e.preventDefault();
+      this._blastFlag = true;
+    };
+    btn.addEventListener('touchstart', fire, { passive: false });
+    btn.addEventListener('mousedown', fire);
+  }
+
   // Call once per frame to read state.
   update() {
     let mx = 0, my = 0;
@@ -117,5 +135,7 @@ export class Controls {
     this.move.y = my;
     this.chompPressed = this._chompFlag;
     this._chompFlag = false;
+    this.blastPressed = this._blastFlag;
+    this._blastFlag = false;
   }
 }

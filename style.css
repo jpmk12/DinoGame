@@ -455,6 +455,37 @@ html, body {
   transform: scale(0.92);
 }
 
+#blast-btn {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 150px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 5px solid #fff;
+  background: radial-gradient(circle at 35% 35%, #8ad8ff, #2a6ad4);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  font-family: inherit;
+  text-shadow: 2px 2px 0 #0a2a6a;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(120, 200, 255, 0.8);
+}
+
+#blast-btn:active {
+  transform: scale(0.92);
+}
+
+#blast-btn.cooldown {
+  background: radial-gradient(circle at 35% 35%, #667, #334);
+  box-shadow: none;
+  opacity: 0.6;
+}
+
 /* ---------- Stage up popup ---------- */
 #stage-up {
   position: fixed;
