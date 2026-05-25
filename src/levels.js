@@ -86,6 +86,27 @@ export const LEVELS = {
     },
   },
 
+  cityRampage: {
+    key: 'cityRampage',
+    name: 'City Rampage',
+    desc: 'Smash the city!',
+    icon: '🏙️',
+    biomeColors: {
+      forest: 0x4a6a4a,   // park green
+      swamp:  0x4a4f57,   // dark asphalt
+      desert: 0x6a6f78,   // concrete grey
+    },
+    sky: { top: 0x3a4a6a, mid: 0x8a90a8, bottom: 0xe0a878, glow: [0.22, 0.13, 0.06] },
+    fog: { color: 0xb6ac9c, density: 0.012 },
+    sun: { color: 0xffe0b0, intensity: 1.05, pos: [40, 55, 15] },
+    hemi: { sky: 0x9aa8c0, ground: 0x55555a, intensity: 0.6 },
+    rim: { color: 0xffc090, intensity: 0.45 },
+    cloud: { color: 0xc8c0b8, emissive: 0.08 },
+    weather: null,
+    city: true,            // main.js spawns destructible buildings
+    vehicleType: 'car',    // streets full of cars instead of safari jeeps
+  },
+
   night: {
     key: 'night',
     name: 'Night Forest',

@@ -137,6 +137,18 @@ export class ParticleSystem {
     });
   }
 
+  rubble(position, scale = 1) {
+    // Concrete chunks + dust cloud for collapsing buildings
+    this.burst(position, {
+      count: 10, colors: [0x8a8884, 0x6a6864, 0xa8a49c, 0x55514c],
+      size: 0.3 * scale, speed: 5, life: 1.3, gravity: -14,
+    });
+    this.burst(position, {
+      count: 7, colors: [0xb8b0a4, 0x968e82],
+      size: 0.5 * scale, speed: 2.5, life: 1.6, gravity: -1, upBias: 0.7,
+    });
+  }
+
   debris(position) {
     // Metal/glass chunks + a puff of dark smoke for chomped vehicles
     this.burst(position, {

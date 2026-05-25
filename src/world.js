@@ -107,9 +107,11 @@ export function buildWorld(scene) {
   scene.add(decorations);
 
   const tropical = !!level.tropicalTrees;
+  // City levels skip natural foliage — buildings (added by main.js) fill it in.
+  const naturalFoliage = !level.city;
 
   // Forest / jungle trees — palms for tropical levels, normal trees otherwise
-  for (let i = 0; i < 110; i++) {
+  for (let i = 0; naturalFoliage && i < 110; i++) {
     const x = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     const z = -20 - Math.random() * (WORLD_SIZE - 10);
     if (Math.hypot(x, z) < 8) continue;
@@ -121,7 +123,7 @@ export function buildWorld(scene) {
   }
 
   // Swamp trees (taller, sparser) — also use palms on tropical
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; naturalFoliage && i < 40; i++) {
     const x = 25 + Math.random() * (WORLD_SIZE - 15);
     const z = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     const t = tropical ? buildPalmTree() : buildTree();
@@ -132,7 +134,7 @@ export function buildWorld(scene) {
   }
 
   // Desert / beach decorations
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; naturalFoliage && i < 40; i++) {
     const x = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     const z = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     if (biomeAt(x, z) !== 'desert') continue;
@@ -145,7 +147,7 @@ export function buildWorld(scene) {
   }
 
   // Ferns on tropical levels — ground cover under the canopy
-  if (tropical) {
+  if (tropical && naturalFoliage) {
     for (let i = 0; i < 80; i++) {
       const x = (Math.random() - 0.5) * WORLD_SIZE * 1.9;
       const z = (Math.random() - 0.5) * WORLD_SIZE * 1.9;

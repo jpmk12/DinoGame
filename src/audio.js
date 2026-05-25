@@ -178,6 +178,13 @@ class AudioManager {
     this._tone(90, 0.25, 'sawtooth', 0.28, 0.4);
   }
 
+  crumble() {
+    // Deep rumble + gritty noise of a building coming down
+    this._tone(60, 0.6, 'sawtooth', 0.3, 0.6);
+    this._noise(0.5, 0.3, 500);
+    setTimeout(() => this._noise(0.35, 0.22, 900), 200);
+  }
+
   plasmaBreath() {
     // Rising charge whine, then a roaring energy beam blast.
     this._tone(180, 0.3, 'sawtooth', 0.18, 4.0); // charge sweep up

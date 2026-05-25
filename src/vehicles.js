@@ -102,6 +102,81 @@ export function buildJeep() {
   return root;
 }
 
+function applyVehicleStats(root) {
+  root.userData.kind = 'vehicle';
+  root.userData.size = 1.4;
+  root.userData.nutrition = 3;
+  root.userData.score = 25;
+  root.userData.speed = 9;
+  root.userData.heading = Math.random() * Math.PI * 2;
+  root.userData.turnTimer = 0;
+  root.userData.honkTimer = 1 + Math.random() * 3;
+  root.userData.fleeing = false;
+  return root;
+}
+
+/**
+ * A regular city car (sedan). Brightly colored, low-slung.
+ */
+export function buildCar() {
+  const root = new THREE.Group();
+  const colors = [0xc0392b, 0x2e86c1, 0xf1c40f, 0xecf0f1, 0x27ae60, 0x34353a, 0xe67e22];
+  const bodyColor = colors[Math.floor(Math.random() * colors.length)];
+  const glass = 0x9ac4d4;
+
+  // Lower body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.4, 2.3), FLAT(bodyColor));
+  body.position.y = 0.5;
+  body.castShadow = true;
+  root.add(body);
+
+  // Cabin (greenhouse)
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.42, 1.1), FLAT(bodyColor));
+  cabin.position.set(0, 0.88, 0.1);
+  cabin.castShadow = true;
+  root.add(cabin);
+
+  // Windows wrap (a slightly larger glass band)
+  const windows = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.3, 1.0), FLAT(glass));
+  windows.position.set(0, 0.9, 0.1);
+  root.add(windows);
+
+  // Headlights / taillights
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.12, 0.08),
+    new THREE.MeshLambertMaterial({ color: 0xffffcc, emissive: 0xffffaa, emissiveIntensity: 0.5 })
+  );
+  head.position.set(0, 0.5, -1.18);
+  root.add(head);
+  const tail = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.12, 0.08),
+    new THREE.MeshLambertMaterial({ color: 0xaa2222, emissive: 0xff2222, emissiveIntensity: 0.4 })
+  );
+  tail.position.set(0, 0.5, 1.18);
+  root.add(tail);
+
+  // Wheels
+  const wheels = [];
+  const wheelGeom = new THREE.CylinderGeometry(0.28, 0.28, 0.2, 12);
+  for (const [x, z] of [[-0.55, -0.75], [0.55, -0.75], [-0.55, 0.75], [0.55, 0.75]]) {
+    const wheel = new THREE.Mesh(wheelGeom, FLAT(0x1a1a1a));
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, 0.28, z);
+    wheel.castShadow = true;
+    root.add(wheel);
+    wheels.push(wheel);
+  }
+
+  applyVehicleStats(root);
+  root.userData.wheels = wheels;
+  root.userData.size = 1.3;
+  return root;
+}
+
+export function buildVehicle(type) {
+  return type === 'car' ? buildCar() : buildJeep();
+}
+
 function placeRandom(obj, playerPos, minDist = 25) {
   for (let tries = 0; tries < 30; tries++) {
     const x = (Math.random() - 0.5) * PLAYABLE_RADIUS * 1.7;
@@ -117,22 +192,24 @@ function placeRandom(obj, playerPos, minDist = 25) {
   obj.position.set(x, getHeightAt(x, z), z);
 }
 
-export function spawnVehicles(scene, playerPos, count = 4) {
+export function spawnVehicles(scene, playerPos, count = 4, type = 'jeep') {
   const group = new THREE.Group();
+  group.userData.vehicleType = type;
   scene.add(group);
   for (let i = 0; i < count; i++) {
-    const j = buildJeep();
-    placeRandom(j, playerPos);
-    group.add(j);
+    const v = buildVehicle(type);
+    placeRandom(v, playerPos);
+    group.add(v);
   }
   return group;
 }
 
 export function spawnVehicle(group, playerPos) {
-  const j = buildJeep();
-  placeRandom(j, playerPos);
-  group.add(j);
-  return j;
+  const type = group.userData.vehicleType || 'jeep';
+  const v = buildVehicle(type);
+  placeRandom(v, playerPos);
+  group.add(v);
+  return v;
 }
 
 // Drive logic: patrol, but flee the player when close (the JP chase!).

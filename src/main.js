@@ -42,6 +42,7 @@ import {
 } from './eggs.js';
 import { spawnFoods, spawnFood, animateFoods } from './foods.js';
 import { spawnVehicles, spawnVehicle, animateVehicles } from './vehicles.js';
+import { spawnCity, animateBuildings, topple } from './buildings.js';
 import { LEVELS, LEVEL_KEYS, setLevelKey, getLevel, getLevelKey } from './levels.js';
 import { WeatherSystem } from './weather.js';
 import {
@@ -194,7 +195,8 @@ let entities = null;     // Group of enemies + critters
 let berries = null;      // Group of power-up berries
 let eggs = null;         // Group of egg nests
 let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
-let vehicles = null;     // Group of ranger jeeps (Dino Park levels only)
+let vehicles = null;     // Group of vehicles (jeeps or cars, level-dependent)
+let buildings = null;    // Group of destructible city buildings (City Rampage)
 let babies = [];         // active baby dinos (THREE.Group instances)
 
 // Title-screen game options — read at startGame.
@@ -270,6 +272,16 @@ function applyPlayerScale() {
   player.scale.setScalar(STAGE_SCALE[stage] * sm * boost * mega);
 }
 
+// Spawn vehicles appropriate to the current level (jeeps on Dino Park,
+// cars on City Rampage), or null if the level has no vehicles.
+function spawnLevelVehicles() {
+  const level = getLevel();
+  if (!level.vehicles && !level.city) return null;
+  const type = level.vehicleType || 'jeep';
+  const count = level.city ? 7 : 4;
+  return spawnVehicles(scene, player.position, count, type);
+}
+
 function startGame(species) {
   audio.unlock();
   // Read title-screen toggles into the live settings
@@ -293,6 +305,7 @@ function startGame(species) {
   if (eggs) scene.remove(eggs);
   if (foods) scene.remove(foods);
   if (vehicles) scene.remove(vehicles);
+  if (buildings) scene.remove(buildings);
   if (homeNest) scene.remove(homeNest);
   removeAllBabies();
 
@@ -310,7 +323,8 @@ function startGame(species) {
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
   foods = spawnFoods(scene, player.position);
-  vehicles = getLevel().vehicles ? spawnVehicles(scene, player.position, 4) : null;
+  vehicles = spawnLevelVehicles();
+  buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
   score = 0;
@@ -428,6 +442,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   if (eggs) scene.remove(eggs);
   if (foods) scene.remove(foods);
   if (vehicles) scene.remove(vehicles);
+  if (buildings) scene.remove(buildings);
   if (homeNest) scene.remove(homeNest);
   removeAllBabies();
   player = buildPlayer(species);
@@ -440,7 +455,8 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   berries = spawnBerries(scene, player.position, 5);
   eggs = spawnEggs(scene, player.position, 4);
   foods = spawnFoods(scene, player.position);
-  vehicles = getLevel().vehicles ? spawnVehicles(scene, player.position, 4) : null;
+  vehicles = spawnLevelVehicles();
+  buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
   power.active = null;
@@ -807,11 +823,13 @@ function frame() {
     if (eggs) animateEggs(eggs, dt);
     if (foods) animateFoods(foods, dt);
     if (vehicles && animateVehicles(vehicles, dt, player.position)) audio.carHonk();
+    if (buildings) animateBuildings(buildings, dt, particles);
     if (homeNest) animateNest(homeNest, dt);
     updatePowerup(dt);
     updatePlasma(dt);
     updateHome(dt);
     handleEggInteraction();
+    if (buildings) handleBuildings(dt);
     handleEating(dt);
     updateCamera(dt);
   }
@@ -966,6 +984,21 @@ function consumeInCone(origin, fwd, range, coneCos) {
       if (gameRunning && vehicles) spawnVehicle(vehicles, player.position);
     }, 5000);
   });
+
+  // The beam levels buildings outright, regardless of the Titan's size
+  if (buildings) {
+    let leveled = 0;
+    eat(buildings, (b) => {
+      if (b.userData.falling) return;
+      topple(b, origin.x, origin.z);
+      score += b.userData.score;
+      leveled++;
+    });
+    if (leveled > 0) {
+      audio.crumble();
+      shake = Math.max(shake, 0.5);
+    }
+  }
 }
 
 function firePlasmaBreath() {
@@ -1184,6 +1217,37 @@ function updateEntities(dt) {
     const limit = PLAYABLE_RADIUS;
     ent.position.x = Math.max(-limit, Math.min(limit, ent.position.x));
     ent.position.z = Math.max(-limit, Math.min(limit, ent.position.z));
+  }
+}
+
+// City buildings: topple them if the player is big enough, otherwise they
+// block the player (the dino is too small to knock them over).
+function handleBuildings(dt) {
+  const playerScale = player.scale.x;
+  const playerSize = playerScale * 1.5;
+  for (let i = buildings.children.length - 1; i >= 0; i--) {
+    const b = buildings.children[i];
+    if (b.userData.falling) continue;
+    const dx = player.position.x - b.position.x;
+    const dz = player.position.z - b.position.z;
+    const dist = Math.hypot(dx, dz);
+    const touchDist = playerSize * 0.7 + b.userData.radius;
+    if (dist > touchDist) continue;
+
+    if (playerScale >= b.userData.toughness) {
+      // Big enough — smash it down!
+      topple(b, player.position.x, player.position.z);
+      audio.crumble();
+      score += b.userData.score;
+      shake = Math.max(shake, 0.45);
+    } else {
+      // Too small — get pushed out of the building's footprint
+      const len = dist || 1;
+      const nx = dx / len;
+      const nz = dz / len;
+      player.position.x = b.position.x + nx * touchDist;
+      player.position.z = b.position.z + nz * touchDist;
+    }
   }
 }
 
