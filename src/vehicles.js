@@ -1,5 +1,15 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, PLAYABLE_RADIUS, getHeightAt } from './world.js';
+import { CELL, ROAD } from './buildings.js';
+
+const LANE = ROAD * 0.22; // offset from road centerline (drive on the right)
+
+// Heading (yaw) so the car faces its travel direction. The model's front
+// (headlights) points -Z, so world-forward = (-sin yaw, -cos yaw).
+function yawFor(axis, dir) {
+  if (axis === 'x') return dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+  return dir > 0 ? Math.PI : 0; // +z faces PI, -z faces 0
+}
 
 // Park ranger jeeps (safari style) that patrol the level and flee
 // from the player — the classic "must go faster" chase. Chomp one for points.
@@ -207,14 +217,120 @@ export function spawnVehicles(scene, playerPos, count = 4, type = 'jeep') {
 export function spawnVehicle(group, playerPos) {
   const type = group.userData.vehicleType || 'jeep';
   const v = buildVehicle(type);
-  placeRandom(v, playerPos);
+  if (group.userData.driveMode === 'grid') initGridCar(v);
+  else placeRandom(v, playerPos);
   group.add(v);
   return v;
 }
 
-// Drive logic: patrol, but flee the player when close (the JP chase!).
-// Returns 'honk' on frames the jeep should honk (so main can play sound).
+// ----- City cars that follow the street grid -----
+export function spawnCityCars(scene, playerPos, count = 8) {
+  const group = new THREE.Group();
+  group.userData.vehicleType = 'car';
+  group.userData.driveMode = 'grid';
+  scene.add(group);
+  for (let i = 0; i < count; i++) {
+    const c = buildCar();
+    initGridCar(c);
+    group.add(c);
+  }
+  return group;
+}
+
+function initGridCar(c) {
+  const u = c.userData;
+  const maxK = Math.floor((PLAYABLE_RADIUS - 8) / CELL);
+  const roadK = Math.round((Math.random() * 2 - 1) * maxK);
+  u.axis = Math.random() < 0.5 ? 'x' : 'z';
+  u.dir = Math.random() < 0.5 ? 1 : -1;
+  const along = (Math.random() * 2 - 1) * maxK * CELL;
+  if (u.axis === 'x') {
+    c.position.set(along, 0, roadK * CELL + (u.dir > 0 ? LANE : -LANE));
+  } else {
+    c.position.set(roadK * CELL + (u.dir > 0 ? -LANE : LANE), 0, along);
+  }
+  c.position.y = getHeightAt(c.position.x, c.position.z);
+  c.rotation.y = yawFor(u.axis, u.dir);
+  u.turnCooldown = 0;
+}
+
+function gridDrive(c, dt, playerPos, limit) {
+  const u = c.userData;
+  const dist = Math.hypot(c.position.x - playerPos.x, c.position.z - playerPos.z);
+  const panic = dist < 16;
+  let honk = false;
+  if (panic) {
+    u.honkTimer -= dt;
+    if (u.honkTimer <= 0) { honk = true; u.honkTimer = 1.5 + Math.random() * 2; }
+  }
+  const speed = (panic ? u.speed * 1.3 : u.speed * 0.6);
+
+  // Advance along the current axis
+  if (u.axis === 'x') c.position.x += u.dir * speed * dt;
+  else c.position.z += u.dir * speed * dt;
+
+  // Keep snapped to the lane (perpendicular coordinate hugs the road line)
+  if (u.axis === 'x') {
+    const lineZ = Math.round(c.position.z / CELL) * CELL + (u.dir > 0 ? LANE : -LANE);
+    c.position.z += (lineZ - c.position.z) * Math.min(1, dt * 5);
+  } else {
+    const lineX = Math.round(c.position.x / CELL) * CELL + (u.dir > 0 ? -LANE : LANE);
+    c.position.x += (lineX - c.position.x) * Math.min(1, dt * 5);
+  }
+
+  // Decide turns at intersections
+  u.turnCooldown -= dt;
+  const travel = u.axis === 'x' ? c.position.x : c.position.z;
+  const nearXing = Math.abs(travel - Math.round(travel / CELL) * CELL) < 0.8;
+  if (nearXing && u.turnCooldown <= 0) {
+    u.turnCooldown = 1.0;
+    const wantTurn = panic || Math.random() < 0.4;
+    if (wantTurn) {
+      const newAxis = u.axis === 'x' ? 'z' : 'x';
+      let bestDir = Math.random() < 0.5 ? 1 : -1;
+      if (panic) {
+        // Turn onto the road direction that increases distance from player
+        const pc = newAxis === 'x' ? playerPos.x : playerPos.z;
+        const vc = newAxis === 'x' ? c.position.x : c.position.z;
+        bestDir = vc >= pc ? 1 : -1;
+      }
+      // Snap the soon-to-be-perpendicular (current travel) coord to the line
+      const lineHere = Math.round(travel / CELL) * CELL;
+      if (u.axis === 'x') c.position.x = lineHere;
+      else c.position.z = lineHere;
+      u.axis = newAxis;
+      u.dir = bestDir;
+    }
+  }
+
+  // U-turn at the city edge
+  if (Math.abs(c.position.x) > limit || Math.abs(c.position.z) > limit) {
+    c.position.x = Math.max(-limit, Math.min(limit, c.position.x));
+    c.position.z = Math.max(-limit, Math.min(limit, c.position.z));
+    u.dir *= -1;
+  }
+
+  c.position.y = getHeightAt(c.position.x, c.position.z);
+  c.rotation.y = yawFor(u.axis, u.dir);
+  if (u.wheels) {
+    const spin = speed * dt * 3;
+    for (const w of u.wheels) w.rotation.x += spin;
+  }
+  return honk;
+}
+
+// Drive logic. City cars follow the road grid; free vehicles (jeeps) wander
+// and flee. Returns true on frames a vehicle honks.
 export function animateVehicles(group, dt, playerPos) {
+  if (group.userData.driveMode === 'grid') {
+    const limit = PLAYABLE_RADIUS - 4;
+    let honk = false;
+    for (const c of group.children) {
+      if (gridDrive(c, dt, playerPos, limit)) honk = true;
+    }
+    return honk;
+  }
+
   const limit = PLAYABLE_RADIUS - 4;
   let honk = false;
   for (const v of group.children) {

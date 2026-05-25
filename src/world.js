@@ -24,13 +24,19 @@ export function biomeAt(x, z) {
  * a real noise library. Amplitude kept modest so gameplay isn't disrupted.
  */
 export function getHeightAt(x, z) {
-  // Large slow hills
-  let h = Math.sin(x * 0.035) * 1.6 + Math.cos(z * 0.04) * 1.4;
-  // Medium-scale ridges
-  h += Math.sin((x + z) * 0.06) * 0.7;
-  h += Math.cos((x - z) * 0.055) * 0.6;
-  // Small detail bumps
-  h += Math.sin(x * 0.18) * 0.25 + Math.cos(z * 0.2) * 0.25;
+  const level = getLevel();
+  let h;
+  if (level && level.flat) {
+    h = 0; // city levels are flat so streets and buildings sit level
+  } else {
+    // Large slow hills
+    h = Math.sin(x * 0.035) * 1.6 + Math.cos(z * 0.04) * 1.4;
+    // Medium-scale ridges
+    h += Math.sin((x + z) * 0.06) * 0.7;
+    h += Math.cos((x - z) * 0.055) * 0.6;
+    // Small detail bumps
+    h += Math.sin(x * 0.18) * 0.25 + Math.cos(z * 0.2) * 0.25;
+  }
   // Boundary mountains: terrain ramps up beyond dist 90, so the world
   // edges feel like distant mountains rather than a drop-off.
   const edgeDist = Math.max(0, Math.max(Math.abs(x), Math.abs(z)) - 90);
@@ -39,7 +45,6 @@ export function getHeightAt(x, z) {
   }
 
   // Per-level central peak (e.g. the volcano on Dino Park)
-  const level = getLevel();
   const peak = level && level.centerPeak;
   if (peak) {
     const dx = x - peak.x;

@@ -1,11 +1,23 @@
 import * as THREE from 'three';
 import { PLAYABLE_RADIUS, getHeightAt } from './world.js';
+import { buildTree } from './dinos.js';
 
-// Destructible city buildings. Big enough dinos topple them; smaller dinos
-// are blocked by them (they act as obstacles). Toppling is animated: the
-// building tips over around its base, throws rubble, then sinks and fades.
+// A real-feeling city: a street grid of blocks separated by roads, with
+// building blocks, parks, and an open plaza at spawn. Big dinos topple
+// buildings (animated); small dinos are blocked by them.
 
-// Building palettes: wall / window-lit / window-dark / roof colors.
+// Street grid geometry — exported so the car AI can follow the roads.
+export const CELL = 32;          // road-to-road pitch
+export const ROAD = 11;          // street width
+const BLOCK = CELL - ROAD;       // usable block interior (~21)
+
+const ASPHALT = 0x33363d;
+const SIDEWALK = 0x6f727a;
+const PLAZA = 0x7d808a;
+const GRASS = 0x4a8a44;
+const LANE = 0xd9c24a;
+
+// ----- Window-texture pool (one per palette, cloned per building) -----
 const PALETTES = [
   { wall: '#5a5f68', lit: '#ffe9a8', dark: '#2a3038', roof: 0x3a3f46 },
   { wall: '#7a6a52', lit: '#ffe9a8', dark: '#3a3026', roof: 0x4a3f30 },
@@ -14,10 +26,10 @@ const PALETTES = [
   { wall: '#737880', lit: '#cfe9ff', dark: '#30363f', roof: 0x44494f },
 ];
 
-function makeWindowTexture(p) {
+function baseWindowTexture(p) {
+  if (p._tex) return p._tex;
   const c = document.createElement('canvas');
-  c.width = 32;
-  c.height = 32;
+  c.width = 32; c.height = 32;
   const ctx = c.getContext('2d');
   ctx.fillStyle = p.wall;
   ctx.fillRect(0, 0, 32, 32);
@@ -31,31 +43,32 @@ function makeWindowTexture(p) {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.magFilter = THREE.NearestFilter;
   t.colorSpace = THREE.SRGBColorSpace;
+  p._tex = t;
   return t;
 }
 
-export function buildBuilding() {
+export function buildBuilding(opts = {}) {
+  const { minW = 4, maxW = 8, minD = 4, maxD = 8, minH = 6, maxH = 22 } = opts;
   const p = PALETTES[Math.floor(Math.random() * PALETTES.length)];
-  const w = 4 + Math.random() * 4;
-  const d = 4 + Math.random() * 4;
-  const h = 6 + Math.random() * 16;
+  const w = minW + Math.random() * (maxW - minW);
+  const d = minD + Math.random() * (maxD - minD);
+  const h = minH + Math.random() * (maxH - minH);
 
-  const tex = makeWindowTexture(p);
+  const tex = baseWindowTexture(p).clone();
+  tex.needsUpdate = true;
   tex.repeat.set(Math.max(1, Math.round(w / 2.5)), Math.max(2, Math.round(h / 3)));
   const winMat = new THREE.MeshLambertMaterial({ map: tex });
   const roofMat = new THREE.MeshLambertMaterial({ color: p.roof });
-  // BoxGeometry material order: +x, -x, +y(top), -y(bottom), +z, -z
   const mats = [winMat, winMat, roofMat, roofMat, winMat, winMat];
 
   const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
-  box.position.y = h / 2; // bottom sits on the group origin
+  box.position.y = h / 2;
   box.castShadow = true;
   box.receiveShadow = true;
 
   const root = new THREE.Group();
   root.add(box);
 
-  // Rooftop detail — a small water tank / AC unit
   const detail = new THREE.Mesh(
     new THREE.BoxGeometry(w * 0.35, 0.8, d * 0.35),
     roofMat
@@ -67,28 +80,168 @@ export function buildBuilding() {
   root.userData.kind = 'building';
   root.userData.height = h;
   root.userData.radius = Math.max(w, d) * 0.5;
-  root.userData.toughness = 0.5 + (h / 22) * 1.0;   // taller = needs a bigger dino
+  root.userData.toughness = 0.5 + (h / 22) * 1.0;
   root.userData.score = Math.round(10 + h * 2);
   root.userData.falling = false;
   return root;
 }
 
+// ----- Flat ground pieces -----
+function flatTile(w, d, color, y = 0.03) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, d),
+    new THREE.MeshLambertMaterial({ color })
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = y;
+  m.receiveShadow = true;
+  return m;
+}
+
+let _dashTex = null;
+function dashTexture() {
+  if (_dashTex) return _dashTex;
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 16;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 4, 16);
+  ctx.fillStyle = '#d9c24a';
+  ctx.fillRect(1, 2, 2, 9); // dash with a gap above/below
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.NearestFilter;
+  _dashTex = t;
+  return t;
+}
+
+function buildStreets(group, half) {
+  // Base asphalt covering the whole play area; block tiles laid on top
+  // leave road-width gaps that read as streets.
+  const base = flatTile(half * 2 + CELL, half * 2 + CELL, ASPHALT, 0.01);
+  group.add(base);
+
+  // Dashed center-line per road line — one textured plane each (cheap).
+  const maxK = Math.ceil(half / CELL);
+  const len = half * 2;
+  const dashes = Math.round(len / 5);
+  for (let k = -maxK; k <= maxK; k++) {
+    const c = k * CELL;
+    if (Math.abs(c) > half) continue;
+
+    const texV = dashTexture().clone();
+    texV.needsUpdate = true;
+    texV.repeat.set(1, dashes);
+    const lineV = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.6, len),
+      new THREE.MeshBasicMaterial({ map: texV, transparent: true })
+    );
+    lineV.rotation.x = -Math.PI / 2;
+    lineV.position.set(c, 0.05, 0);
+    group.add(lineV);
+
+    const texH = dashTexture().clone();
+    texH.needsUpdate = true;
+    texH.repeat.set(1, dashes);
+    const lineH = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.6, len),
+      new THREE.MeshBasicMaterial({ map: texH, transparent: true })
+    );
+    lineH.rotation.x = -Math.PI / 2;
+    lineH.rotation.z = Math.PI / 2;
+    lineH.position.set(0, 0.05, c);
+    group.add(lineH);
+  }
+}
+
+function addBuildingBlock(group, cx, cz) {
+  const lot = flatTile(BLOCK, BLOCK, SIDEWALK);
+  lot.position.set(cx, 0.03, cz);
+  group.add(lot);
+
+  if (Math.random() < 0.28) {
+    // One tower filling most of the block
+    const b = buildBuilding({ minW: 11, maxW: 15, minD: 11, maxD: 15, minH: 14, maxH: 26 });
+    b.position.set(cx, 0, cz);
+    b.rotation.y = Math.floor(Math.random() * 4) * (Math.PI / 2);
+    group.add(b);
+    return;
+  }
+
+  // 2x2 arrangement of smaller buildings, set back from the streets
+  const off = BLOCK / 4;
+  for (const sx of [-off, off]) {
+    for (const sz of [-off, off]) {
+      if (Math.random() < 0.18) continue; // occasional empty corner
+      const b = buildBuilding({ minW: 6, maxW: 9, minD: 6, maxD: 9, minH: 6, maxH: 18 });
+      b.position.set(
+        cx + sx + (Math.random() - 0.5) * 1.2,
+        0,
+        cz + sz + (Math.random() - 0.5) * 1.2
+      );
+      b.rotation.y = Math.floor(Math.random() * 4) * (Math.PI / 2);
+      group.add(b);
+    }
+  }
+}
+
+function addPark(group, cx, cz) {
+  const lot = flatTile(BLOCK, BLOCK, GRASS);
+  lot.position.set(cx, 0.03, cz);
+  group.add(lot);
+
+  // A pond in some parks
+  if (Math.random() < 0.4) {
+    const pond = new THREE.Mesh(
+      new THREE.CircleGeometry(3 + Math.random() * 2, 18),
+      new THREE.MeshLambertMaterial({ color: 0x3a6abf })
+    );
+    pond.rotation.x = -Math.PI / 2;
+    pond.position.set(cx, 0.05, cz);
+    group.add(pond);
+  }
+
+  // Trees scattered in the park (decoration, not destructible)
+  const n = 3 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < n; i++) {
+    const t = buildTree();
+    t.position.set(
+      cx + (Math.random() - 0.5) * BLOCK * 0.8,
+      0,
+      cz + (Math.random() - 0.5) * BLOCK * 0.8
+    );
+    t.scale.setScalar(0.6 + Math.random() * 0.5);
+    t.userData.kind = 'decor';
+    group.add(t);
+  }
+}
+
+function addPlaza(group, cx, cz) {
+  const lot = flatTile(BLOCK, BLOCK, PLAZA);
+  lot.position.set(cx, 0.03, cz);
+  group.add(lot);
+}
+
 export function spawnCity(scene, playerPos) {
   const group = new THREE.Group();
   scene.add(group);
-  const spacing = 15;
-  const blocks = 6;
-  for (let gx = -blocks; gx <= blocks; gx++) {
-    for (let gz = -blocks; gz <= blocks; gz++) {
-      const x = gx * spacing + (Math.random() - 0.5) * 4;
-      const z = gz * spacing + (Math.random() - 0.5) * 4;
-      if (Math.hypot(x, z) < 12) continue;          // open plaza at spawn
-      if (Math.hypot(x, z) > PLAYABLE_RADIUS - 6) continue;
-      if (Math.random() < 0.28) continue;           // gaps for streets/parks
-      const b = buildBuilding();
-      b.position.set(x, getHeightAt(x, z), z);
-      b.rotation.y = (Math.floor(Math.random() * 4)) * (Math.PI / 2);
-      group.add(b);
+  const half = PLAYABLE_RADIUS - 4;
+
+  buildStreets(group, half);
+
+  const maxK = Math.floor(half / CELL);
+  for (let kx = -maxK; kx < maxK; kx++) {
+    for (let kz = -maxK; kz < maxK; kz++) {
+      // Block interior center sits between two road lines
+      const cx = kx * CELL + CELL / 2;
+      const cz = kz * CELL + CELL / 2;
+      if (Math.hypot(cx, cz) > half - BLOCK / 2) continue;
+      if (Math.hypot(cx, cz) < CELL * 1.2) {
+        addPlaza(group, cx, cz);          // open area around spawn
+      } else if (Math.random() < 0.18) {
+        addPark(group, cx, cz);
+      } else {
+        addBuildingBlock(group, cx, cz);
+      }
     }
   }
   return group;
@@ -101,7 +254,6 @@ export function topple(building, fromX, fromZ) {
   let dz = building.position.z - fromZ;
   const len = Math.hypot(dx, dz) || 1;
   dx /= len; dz /= len;
-  // Axis perpendicular to the fall direction so the top tips toward (dx,dz)
   building.userData.fallAxis = new THREE.Vector3(dz, 0, -dx).normalize();
   building.userData.fallAngle = 0;
   building.userData.fallSpeed = 0.4;
@@ -109,27 +261,21 @@ export function topple(building, fromX, fromZ) {
   building.userData.falling = true;
 }
 
-// Advance toppling animations. Calls particles.rubble(...) for dust/debris.
 export function animateBuildings(group, dt, particles) {
   for (let i = group.children.length - 1; i >= 0; i--) {
     const b = group.children[i];
     const u = b.userData;
-    if (!u.falling) continue;
+    if (!u || !u.falling) continue;
 
     if (u.fallAngle < Math.PI / 2) {
-      u.fallSpeed += dt * 5;            // gravity-ish angular acceleration
+      u.fallSpeed += dt * 5;
       u.fallAngle = Math.min(Math.PI / 2, u.fallAngle + u.fallSpeed * dt);
       b.quaternion.setFromAxisAngle(u.fallAxis, u.fallAngle);
-      if (Math.random() < 0.4 && particles) {
-        particles.rubble(b.position, u.radius);
-      }
+      if (Math.random() < 0.4 && particles) particles.rubble(b.position, u.radius);
     } else {
-      // Flattened — sink into the ground and fade, then remove
       u.restTimer += dt;
       b.position.y -= dt * 1.5;
-      if (u.restTimer > 1.8) {
-        group.remove(b);
-      }
+      if (u.restTimer > 1.8) group.remove(b);
     }
   }
 }

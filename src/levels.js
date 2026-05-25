@@ -104,6 +104,7 @@ export const LEVELS = {
     cloud: { color: 0xc8c0b8, emissive: 0.08 },
     weather: null,
     city: true,            // main.js spawns destructible buildings
+    flat: true,            // flat ground so streets and blocks sit level
     vehicleType: 'car',    // streets full of cars instead of safari jeeps
   },
 

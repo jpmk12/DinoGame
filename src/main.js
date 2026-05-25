@@ -41,7 +41,7 @@ import {
   BABY_EAT_RADIUS,
 } from './eggs.js';
 import { spawnFoods, spawnFood, animateFoods } from './foods.js';
-import { spawnVehicles, spawnVehicle, animateVehicles } from './vehicles.js';
+import { spawnVehicles, spawnCityCars, spawnVehicle, animateVehicles } from './vehicles.js';
 import { spawnCity, animateBuildings, topple } from './buildings.js';
 import { LEVELS, LEVEL_KEYS, setLevelKey, getLevel, getLevelKey } from './levels.js';
 import { WeatherSystem } from './weather.js';
@@ -276,10 +276,9 @@ function applyPlayerScale() {
 // cars on City Rampage), or null if the level has no vehicles.
 function spawnLevelVehicles() {
   const level = getLevel();
-  if (!level.vehicles && !level.city) return null;
-  const type = level.vehicleType || 'jeep';
-  const count = level.city ? 7 : 4;
-  return spawnVehicles(scene, player.position, count, type);
+  if (level.city) return spawnCityCars(scene, player.position, 9);
+  if (level.vehicles) return spawnVehicles(scene, player.position, 4, level.vehicleType || 'jeep');
+  return null;
 }
 
 function startGame(species) {
@@ -989,7 +988,7 @@ function consumeInCone(origin, fwd, range, coneCos) {
   if (buildings) {
     let leveled = 0;
     eat(buildings, (b) => {
-      if (b.userData.falling) return;
+      if (b.userData.kind !== 'building' || b.userData.falling) return;
       topple(b, origin.x, origin.z);
       score += b.userData.score;
       leveled++;
@@ -1227,7 +1226,7 @@ function handleBuildings(dt) {
   const playerSize = playerScale * 1.5;
   for (let i = buildings.children.length - 1; i >= 0; i--) {
     const b = buildings.children[i];
-    if (b.userData.falling) continue;
+    if (b.userData.kind !== 'building' || b.userData.falling) continue;
     const dx = player.position.x - b.position.x;
     const dz = player.position.z - b.position.z;
     const dist = Math.hypot(dx, dz);
