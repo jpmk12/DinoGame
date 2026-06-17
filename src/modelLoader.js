@@ -125,11 +125,15 @@ async function tryLoadModel(speciesKey) {
           const root = isFbx ? loaded : loaded.scene;
           const animations = isFbx ? (loaded.animations || []) : (loaded.animations || []);
           normalizeModel(root, spec);
-          // Cache the BARE normalized root. We wrap in createDinoMeshSync
-          // after SkeletonUtils.clone so SK works on the same hierarchy
-          // it received from the loader (some skeleton structures get
-          // confused if there's an extra Group wrapping them at clone time).
-          root.userData.animations = animations;
+          // Strip any per-bone .scale tracks. Quaternius walk/run anims
+          // sometimes include cartoon squash-and-stretch on the leg bones
+          // (the lower leg literally scales up during stride extension),
+          // which Three.js plays back faithfully and reads as "stretching".
+          // Removing the scale tracks keeps the natural position + rotation
+          // motion intact. If a clip didn't have any scale tracks the call
+          // is a no-op.
+          const cleanedAnimations = stripScaleTracks(animations);
+          root.userData.animations = cleanedAnimations;
           modelCache.set(speciesKey, root);
           resolve(root);
         },
@@ -149,6 +153,27 @@ async function tryLoadModel(speciesKey) {
  * Resize/recenter loaded model so it stands on y=0 with consistent forward (-Z)
  * orientation and roughly TARGET_LENGTH along its longest horizontal axis.
  */
+// Build a copy of `clips` with any .scale tracks removed. Each AnimationClip
+// is replaced by a new one when at least one of its tracks is filtered out;
+// untouched clips pass through by reference.
+function stripScaleTracks(clips) {
+  const out = [];
+  let strippedCount = 0;
+  for (const clip of clips) {
+    const filtered = clip.tracks.filter((t) => !t.name.endsWith('.scale'));
+    if (filtered.length === clip.tracks.length) {
+      out.push(clip);
+    } else {
+      strippedCount += clip.tracks.length - filtered.length;
+      out.push(new THREE.AnimationClip(clip.name, clip.duration, filtered));
+    }
+  }
+  if (strippedCount > 0) {
+    console.log('[DinoGrow] Stripped', strippedCount, 'scale tracks (cartoon squash/stretch)');
+  }
+  return out;
+}
+
 function normalizeModel(root, spec) {
   // Apply shadow casting and tweak materials for the low-poly vibe.
   // Also disable frustum culling on SkinnedMesh — Three.js culls based on
