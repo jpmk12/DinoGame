@@ -49,20 +49,23 @@ GLB falls back automatically to its procedural mesh.
 
 ## Expected filenames
 
-The game looks for these exact names in `/models/`. Anything missing falls
-back to the procedural mesh; the game never breaks.
+The game accepts **either `.glb`/glTF or `.fbx`** files — it auto-detects
+the format at startup. Use the extension your pack came with. Mixed formats
+in the same `/models/` folder will use whichever shows up first (GLB wins).
 
 ```
-Tyrannosaurus.glb
-Triceratops.glb
-Stegosaurus.glb
-Velociraptor.glb
-Brachiosaurus.glb
-Spinosaurus.glb
-Ankylosaurus.glb
-Parasaurolophus.glb
-Pteranodon.glb
+Tyrannosaurus.glb   or   Tyrannosaurus.fbx
+Triceratops.glb     or   Triceratops.fbx
+Stegosaurus.glb     or   Stegosaurus.fbx
+Velociraptor.glb    or   Velociraptor.fbx
+Brachiosaurus.glb   or   Brachiosaurus.fbx
+Spinosaurus.glb     or   Spinosaurus.fbx
+Ankylosaurus.glb    or   Ankylosaurus.fbx
+Parasaurolophus.glb or   Parasaurolophus.fbx
+Pteranodon.glb      or   Pteranodon.fbx
 ```
+
+Anything missing falls back to the procedural mesh; the game never breaks.
 
 The Titan (Plasma Breath beam-monster) is procedural-only by design.
 

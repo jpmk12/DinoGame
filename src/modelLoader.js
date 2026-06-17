@@ -1,48 +1,74 @@
 import * as THREE from 'three';
 import { SPECIES } from './dinos.js';
 
-// Loads Quaternius (or any) .glb models from /models/, with a graceful
-// fallback to the procedural builder if the file is missing.
-// Models are loaded once and cloned per instance.
-//
-// IMPORTANT: GLTFLoader is loaded dynamically the first time we need it,
-// so a CDN issue with the loader cannot break the rest of the game.
+// Loads Quaternius (or any) dinosaur models from /models/, with a graceful
+// fallback to the procedural builder if the file is missing. Supports both
+// GLB/glTF and FBX out of the box — whichever the user has dropped in
+// /models/ for the trex slot is the format we use for the rest of the run.
 
-let loaderPromise = null;
-function getLoader() {
-  if (!loaderPromise) {
-    loaderPromise = import('three/addons/loaders/GLTFLoader.js')
+let glbLoaderPromise = null;
+function getGlbLoader() {
+  if (!glbLoaderPromise) {
+    glbLoaderPromise = import('three/addons/loaders/GLTFLoader.js')
       .then((mod) => new mod.GLTFLoader())
       .catch((err) => {
-        console.warn('[DinoGrow] GLTFLoader unavailable, using procedural only:', err);
+        console.warn('[DinoGrow] GLTFLoader unavailable:', err);
         return null;
       });
   }
-  return loaderPromise;
+  return glbLoaderPromise;
 }
 
-const modelCache = new Map();      // species -> THREE.Group (loaded GLB scene)
-const modelMissing = new Set();    // species we've already 404'd on (don't retry)
-const pendingLoads = new Map();    // species -> Promise
+let fbxLoaderPromise = null;
+function getFbxLoader() {
+  if (!fbxLoaderPromise) {
+    fbxLoaderPromise = import('three/addons/loaders/FBXLoader.js')
+      .then((mod) => new mod.FBXLoader())
+      .catch((err) => {
+        console.warn('[DinoGrow] FBXLoader unavailable:', err);
+        return null;
+      });
+  }
+  return fbxLoaderPromise;
+}
+
+const modelCache = new Map();
+const modelMissing = new Set();
+const pendingLoads = new Map();
 
 const MODELS_BASE = './models/';
-const TARGET_LENGTH = 2.0; // normalize all dinos to ~2 units long at scale 1.0
+const TARGET_LENGTH = 2.0;
+
+// Which extension to use for this run. Detected at preload by HEAD-probing
+// the trex file in both formats. 'glb' wins ties since it's lighter.
+let modelExt = null;
+
+function expectedFile(speciesKey, ext = modelExt) {
+  const spec = SPECIES[speciesKey];
+  if (!spec || !spec.modelFile) return null;
+  // SPECIES.modelFile is stored with the .glb extension; swap to detected.
+  const base = spec.modelFile.replace(/\.(glb|fbx)$/i, '');
+  return base + '.' + (ext || 'glb');
+}
 
 /**
  * Try to preload models from /models/. Always resolves; never throws.
- * If a probe HEAD request 404s, we skip ever trying to load.
+ * Detects whether the user has uploaded GLB or FBX files by HEAD-probing
+ * both formats for the T-Rex entry; if neither exists we skip loading
+ * entirely so there's no console noise.
  */
 export async function preloadAllModels() {
-  // Cheap probe: HEAD-check one expected file. If it's a 404, skip loading
-  // entirely — the user hasn't dropped any Quaternius models in.
-  let anyExist = false;
-  try {
-    const probe = await fetch(MODELS_BASE + SPECIES.trex.modelFile, { method: 'HEAD' });
-    anyExist = probe.ok;
-  } catch (_) {
-    anyExist = false;
+  // Probe both formats for the trex (the only species that must exist for
+  // detection). Whichever responds with 200 wins.
+  const trexBase = SPECIES.trex.modelFile.replace(/\.(glb|fbx)$/i, '');
+  const candidates = ['glb', 'fbx'];
+  for (const ext of candidates) {
+    try {
+      const probe = await fetch(MODELS_BASE + trexBase + '.' + ext, { method: 'HEAD' });
+      if (probe.ok) { modelExt = ext; break; }
+    } catch (_) { /* try next */ }
   }
-  if (!anyExist) return [];
+  if (!modelExt) return [];
 
   const promises = [];
   for (const key of Object.keys(SPECIES)) {
@@ -51,7 +77,6 @@ export async function preloadAllModels() {
   return Promise.allSettled(promises);
 }
 
-// Lazy-load SkeletonUtils for proper skinned-mesh cloning when GLBs have rigs.
 let skUtilsPromise = null;
 function getSkeletonUtils() {
   if (!skUtilsPromise) {
@@ -73,9 +98,11 @@ async function tryLoadModel(speciesKey) {
     return null;
   }
 
-  const url = MODELS_BASE + spec.modelFile;
+  const url = MODELS_BASE + expectedFile(speciesKey);
+  const isFbx = modelExt === 'fbx';
+
   const p = (async () => {
-    const loader = await getLoader();
+    const loader = isFbx ? await getFbxLoader() : await getGlbLoader();
     if (!loader) {
       modelMissing.add(speciesKey);
       return null;
@@ -83,12 +110,13 @@ async function tryLoadModel(speciesKey) {
     return new Promise((resolve) => {
       loader.load(
         url,
-        (gltf) => {
-          const root = gltf.scene;
+        (loaded) => {
+          // GLTFLoader returns { scene, animations }; FBXLoader returns a Group
+          // directly with .animations on it.
+          const root = isFbx ? loaded : loaded.scene;
+          const animations = isFbx ? (loaded.animations || []) : (loaded.animations || []);
           normalizeModel(root, spec);
-          // Keep animations attached to the cached root so each clone can
-          // build its own AnimationMixer + Actions.
-          root.userData.animations = gltf.animations || [];
+          root.userData.animations = animations;
           modelCache.set(speciesKey, root);
           resolve(root);
         },

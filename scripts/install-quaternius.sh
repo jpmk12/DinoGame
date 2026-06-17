@@ -70,30 +70,60 @@ MAPPINGS=(
 found=0
 missing=()
 
-# Build an index of all .glb files in the source tree, keyed by lower-case basename
-declare -A INDEX
+# Detect format: prefer .glb, fall back to .fbx. Whichever has more matches
+# wins; the game's model loader auto-detects which one is present.
+declare -A GLB_INDEX
+declare -A FBX_INDEX
 while IFS= read -r path; do
   base="$(basename "$path" .glb)"
   base_lc="$(echo "$base" | tr '[:upper:]' '[:lower:]')"
-  INDEX["$base_lc"]="$path"
+  GLB_INDEX["$base_lc"]="$path"
 done < <(find "$SOURCE_DIR" -type f -name '*.glb')
+while IFS= read -r path; do
+  base="$(basename "$path" .fbx)"
+  base_lc="$(echo "$base" | tr '[:upper:]' '[:lower:]')"
+  FBX_INDEX["$base_lc"]="$path"
+done < <(find "$SOURCE_DIR" -type f -name '*.fbx')
+
+GLB_COUNT=${#GLB_INDEX[@]}
+FBX_COUNT=${#FBX_INDEX[@]}
+if [ "$GLB_COUNT" -gt 0 ]; then
+  EXT='glb'
+  INDEX_NAME=GLB_INDEX
+elif [ "$FBX_COUNT" -gt 0 ]; then
+  EXT='fbx'
+  INDEX_NAME=FBX_INDEX
+else
+  echo "Error: no .glb or .fbx files found under $SOURCE_DIR"
+  exit 1
+fi
+echo "Detected format: .$EXT  (glb:$GLB_COUNT, fbx:$FBX_COUNT)"
+echo
+
+# Copy referenced index entries (bash declare -n needs 4.3+; do it via eval).
+lookup_in_index() {
+  local key="$1"
+  local var="${INDEX_NAME}[$key]"
+  eval "echo \"\${$var:-}\""
+}
 
 for mapping in "${MAPPINGS[@]}"; do
   target="${mapping%%|*}"
   candidates="${mapping#*|}"
   match=""
   for cand in $candidates; do
-    if [ -n "${INDEX[$cand]:-}" ]; then
-      match="${INDEX[$cand]}"
+    val="$(lookup_in_index "$cand")"
+    if [ -n "$val" ]; then
+      match="$val"
       break
     fi
   done
   if [ -n "$match" ]; then
-    cp -f "$match" "$MODELS_DIR/$target.glb"
-    echo "  [ok]    $target.glb  <-  $(basename "$match")"
+    cp -f "$match" "$MODELS_DIR/$target.$EXT"
+    echo "  [ok]    $target.$EXT  <-  $(basename "$match")"
     found=$((found + 1))
   else
-    echo "  [miss]  $target.glb  (looked for: $candidates)"
+    echo "  [miss]  $target.$EXT  (looked for: $candidates)"
     missing+=("$target")
   fi
 done
