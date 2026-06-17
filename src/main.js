@@ -667,14 +667,15 @@ preloadAllModels().then(() => {
   const el = document.getElementById('model-status-text');
   const wrap = document.getElementById('model-status');
   if (s.loaded.length > 0) {
-    console.log(`[DinoGrow] Loaded ${s.loaded.length}/${s.total} GLB models:`, s.loaded);
+    const fmt = (s.format || 'glb').toUpperCase();
+    console.log(`[DinoGrow] Loaded ${s.loaded.length}/${s.total} ${fmt} models:`, s.loaded);
     if (el && wrap) {
-      el.textContent = `🦴 ${s.loaded.length} / ${s.total} animated GLB models loaded`;
+      el.textContent = `🦴 ${s.loaded.length} / ${s.total} animated ${fmt} models loaded`;
       wrap.classList.add('glb');
     }
   } else {
-    console.log('[DinoGrow] Using procedural dinos (no GLB models in /models/).');
-    if (el) el.textContent = 'Using procedural meshes — drop GLBs in /models/ for animated dinos';
+    console.log('[DinoGrow] Using procedural dinos (no model files in /models/).');
+    if (el) el.textContent = 'Using procedural meshes — drop GLB or FBX files in /models/ for animated dinos';
   }
 });
 

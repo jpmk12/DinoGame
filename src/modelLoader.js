@@ -116,9 +116,14 @@ async function tryLoadModel(speciesKey) {
           const root = isFbx ? loaded : loaded.scene;
           const animations = isFbx ? (loaded.animations || []) : (loaded.animations || []);
           normalizeModel(root, spec);
-          root.userData.animations = animations;
-          modelCache.set(speciesKey, root);
-          resolve(root);
+          // Wrap in an outer Group so callers can freely set position
+          // without destroying the centering offsets stored on the inner
+          // root. (createDinoMeshSync clones THIS wrapper.)
+          const wrapper = new THREE.Group();
+          wrapper.add(root);
+          wrapper.userData.animations = animations;
+          modelCache.set(speciesKey, wrapper);
+          resolve(wrapper);
         },
         undefined,
         () => {
@@ -269,9 +274,14 @@ export function setMotion(instance, speedNorm, fade = 0.2) {
 }
 
 export function modelStatus() {
+  // Only species that declare a modelFile can ever load; exclude
+  // procedural-only entries (like Titan) from the total so the badge
+  // reflects what's actually possible to load.
+  const loadable = Object.values(SPECIES).filter((s) => s.modelFile).length;
   return {
     loaded: [...modelCache.keys()],
     missing: [...modelMissing],
-    total: Object.keys(SPECIES).length,
+    total: loadable,
+    format: modelExt,
   };
 }
