@@ -243,14 +243,17 @@ export function createDinoMeshSync(speciesKey) {
     const bare = (SK_MODULE && SK_MODULE.clone)
       ? SK_MODULE.clone(cached)
       : cached.clone(true);
-    // Quaternius (and most Blender-sourced) dinos face +Z. The procedural
-    // meshes and the camera/movement code assume -Z is "forward", so flip
-    // the bare 180 degrees around Y before wrapping. Centering still
-    // holds because the bounds are symmetric around origin after
-    // normalize.
-    bare.rotation.y = Math.PI;
+    // NB: previously rotated `bare` 180deg here to flip Quaternius's
+    // +Z-forward convention to the game's -Z-forward. That broke skinning
+    // (the bind matrices were captured by SK.clone *without* the rotation,
+    // so at runtime the bones ended up in different world positions than
+    // their bind pose - vertices skinned to wrong targets, causing
+    // visible stretching during walk cycles).
+    // Instead, callers add Math.PI to the wrapper's rotation when this
+    // wrapper holds an FBX/GLB clone. Marker below.
     const inst = new THREE.Group();
     inst.add(bare);
+    inst.userData.faceFlip = Math.PI;
     inst.traverse((o) => {
       if (o.isSkinnedMesh) o.frustumCulled = false;
       if (o.isMesh && o.material) {

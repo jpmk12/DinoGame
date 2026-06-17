@@ -881,7 +881,7 @@ function updateBabies(dt) {
       baby.position.x += (dx / dist) * step;
       baby.position.z += (dz / dist) * step;
       const yaw = Math.atan2(-(dx / dist), -(dz / dist));
-      baby.rotation.y = yaw;
+      baby.rotation.y = yaw + (baby.userData.faceFlip || 0);
       moving = true;
     }
     animateDino(baby, dt, moving);
@@ -1768,7 +1768,7 @@ function updatePlayer(dt) {
     if (speed > 0.05) {
       player.position.x += mv.x * baseSpeed * dt;
       player.position.z += mv.y * baseSpeed * dt;
-      const targetYaw = Math.atan2(-mv.x, -mv.y);
+      const targetYaw = Math.atan2(-mv.x, -mv.y) + (player.userData.faceFlip || 0);
       let cur = player.rotation.y;
       let diff = targetYaw - cur;
       while (diff > Math.PI) diff -= Math.PI * 2;
@@ -1834,7 +1834,7 @@ function updateEntities(dt) {
       const sp = (d.speed || 3) * 1.6;
       ent.position.x += (ax / al) * sp * dt;
       ent.position.z += (az / al) * sp * dt;
-      ent.rotation.y = Math.atan2(-(ax / al), -(az / al));
+      ent.rotation.y = Math.atan2(-(ax / al), -(az / al)) + (ent.userData.faceFlip || 0);
       const lim = PLAYABLE_RADIUS - 2;
       ent.position.x = Math.max(-lim, Math.min(lim, ent.position.x));
       ent.position.z = Math.max(-lim, Math.min(lim, ent.position.z));
@@ -1866,7 +1866,7 @@ function updateEntities(dt) {
       const sp = d.fleeing ? d.speed * 1.5 : d.speed * 0.5;
       ent.position.x += d.wanderDir.x * sp * dt;
       ent.position.z += d.wanderDir.z * sp * dt;
-      ent.rotation.y = Math.atan2(-d.wanderDir.x, -d.wanderDir.z);
+      ent.rotation.y = Math.atan2(-d.wanderDir.x, -d.wanderDir.z) + (ent.userData.faceFlip || 0);
       animateDino(ent, dt, true);
     } else if (d.kind === 'enemy') {
       const distToPlayer = ent.position.distanceTo(player.position);
@@ -1912,7 +1912,7 @@ function updateEntities(dt) {
       }
 
       if (moving) {
-        const targetYaw = Math.atan2(-dir.x, -dir.z);
+        const targetYaw = Math.atan2(-dir.x, -dir.z) + (ent.userData.faceFlip || 0);
         let cur = ent.rotation.y;
         let diff = targetYaw - cur;
         while (diff > Math.PI) diff -= Math.PI * 2;
