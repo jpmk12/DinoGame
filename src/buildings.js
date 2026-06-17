@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PLAYABLE_RADIUS, getHeightAt } from './world.js';
 import { buildTree } from './dinos.js';
+import { getLevel } from './levels.js';
 
 // A real-feeling city: a street grid of blocks separated by roads, with
 // building blocks, parks, and an open plaza at spawn. Big dinos topple
@@ -48,7 +49,10 @@ function baseWindowTexture(p) {
 }
 
 export function buildBuilding(opts = {}) {
-  const { minW = 4, maxW = 8, minD = 4, maxD = 8, minH = 6, maxH = 22 } = opts;
+  const {
+    minW = 4, maxW = 8, minD = 4, maxD = 8, minH = 6, maxH = 22,
+    glowingWindows = false,
+  } = opts;
   const p = PALETTES[Math.floor(Math.random() * PALETTES.length)];
   const w = minW + Math.random() * (maxW - minW);
   const d = minD + Math.random() * (maxD - minD);
@@ -57,7 +61,14 @@ export function buildBuilding(opts = {}) {
   const tex = baseWindowTexture(p).clone();
   tex.needsUpdate = true;
   tex.repeat.set(Math.max(1, Math.round(w / 2.5)), Math.max(2, Math.round(h / 3)));
-  const winMat = new THREE.MeshLambertMaterial({ map: tex });
+  const winMat = glowingWindows
+    ? new THREE.MeshLambertMaterial({
+        map: tex,
+        emissiveMap: tex,
+        emissive: 0xffffff,
+        emissiveIntensity: 1.2, // bright enough to bloom
+      })
+    : new THREE.MeshLambertMaterial({ map: tex });
   const roofMat = new THREE.MeshLambertMaterial({ color: p.roof });
   const mats = [winMat, winMat, roofMat, roofMat, winMat, winMat];
 
@@ -153,26 +164,31 @@ function buildStreets(group, half) {
   }
 }
 
-function addBuildingBlock(group, cx, cz) {
+function addBuildingBlock(group, cx, cz, glow) {
   const lot = flatTile(BLOCK, BLOCK, SIDEWALK);
   lot.position.set(cx, 0.03, cz);
   group.add(lot);
 
   if (Math.random() < 0.28) {
     // One tower filling most of the block
-    const b = buildBuilding({ minW: 11, maxW: 15, minD: 11, maxD: 15, minH: 14, maxH: 26 });
+    const b = buildBuilding({
+      minW: 11, maxW: 15, minD: 11, maxD: 15, minH: 14, maxH: 26,
+      glowingWindows: glow,
+    });
     b.position.set(cx, 0, cz);
     b.rotation.y = Math.floor(Math.random() * 4) * (Math.PI / 2);
     group.add(b);
     return;
   }
 
-  // 2x2 arrangement of smaller buildings, set back from the streets
   const off = BLOCK / 4;
   for (const sx of [-off, off]) {
     for (const sz of [-off, off]) {
-      if (Math.random() < 0.18) continue; // occasional empty corner
-      const b = buildBuilding({ minW: 6, maxW: 9, minD: 6, maxD: 9, minH: 6, maxH: 18 });
+      if (Math.random() < 0.18) continue;
+      const b = buildBuilding({
+        minW: 6, maxW: 9, minD: 6, maxD: 9, minH: 6, maxH: 18,
+        glowingWindows: glow,
+      });
       b.position.set(
         cx + sx + (Math.random() - 0.5) * 1.2,
         0,
@@ -225,22 +241,23 @@ export function spawnCity(scene, playerPos) {
   const group = new THREE.Group();
   scene.add(group);
   const half = PLAYABLE_RADIUS - 4;
+  const level = getLevel();
+  const glow = !!level.nightCity;
 
   buildStreets(group, half);
 
   const maxK = Math.floor(half / CELL);
   for (let kx = -maxK; kx < maxK; kx++) {
     for (let kz = -maxK; kz < maxK; kz++) {
-      // Block interior center sits between two road lines
       const cx = kx * CELL + CELL / 2;
       const cz = kz * CELL + CELL / 2;
       if (Math.hypot(cx, cz) > half - BLOCK / 2) continue;
       if (Math.hypot(cx, cz) < CELL * 1.2) {
-        addPlaza(group, cx, cz);          // open area around spawn
+        addPlaza(group, cx, cz);
       } else if (Math.random() < 0.18) {
         addPark(group, cx, cz);
       } else {
-        addBuildingBlock(group, cx, cz);
+        addBuildingBlock(group, cx, cz, glow);
       }
     }
   }

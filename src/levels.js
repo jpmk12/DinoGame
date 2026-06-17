@@ -19,6 +19,7 @@ export const LEVELS = {
     rim: { color: 0xa8c8ff, intensity: 0.35 },
     cloud: { color: 0xffffff, emissive: 0.15 },
     weather: null,
+    objective: { kind: 'reachStage', value: 4, text: 'Reach the GIANT stage' },
   },
 
   volcano: {
@@ -38,6 +39,7 @@ export const LEVELS = {
     rim: { color: 0xff6a3a, intensity: 0.55 },
     cloud: { color: 0x4a2a2a, emissive: 0.05 }, // dark ash clouds
     weather: 'embers',
+    objective: { kind: 'eatDinos', value: 12, text: 'Devour 12 enemy dinos' },
   },
 
   tundra: {
@@ -57,6 +59,7 @@ export const LEVELS = {
     rim: { color: 0xa0c0e8, intensity: 0.4 },
     cloud: { color: 0xffffff, emissive: 0.2 },
     weather: 'snow',
+    objective: { kind: 'eatCritters', value: 25, text: 'Catch 25 scurrying critters' },
   },
 
   dinoPark: {
@@ -84,6 +87,7 @@ export const LEVELS = {
       radius: 38,
       height: 42,
     },
+    objective: { kind: 'chompVehicles', value: 5, text: 'Chomp 5 ranger jeeps' },
   },
 
   cityRampage: {
@@ -106,6 +110,31 @@ export const LEVELS = {
     city: true,            // main.js spawns destructible buildings
     flat: true,            // flat ground so streets and blocks sit level
     vehicleType: 'car',    // streets full of cars instead of safari jeeps
+    objective: { kind: 'topple', value: 20, text: 'Topple 20 buildings' },
+  },
+
+  nightCity: {
+    key: 'nightCity',
+    name: 'Night City',
+    desc: 'After-hours rampage',
+    icon: '🌃',
+    biomeColors: {
+      forest: 0x1a3a3a,
+      swamp:  0x1a1f2a,
+      desert: 0x232830,
+    },
+    sky: { top: 0x06091a, mid: 0x14203a, bottom: 0x2a1830, glow: [0.08, 0.05, 0.10] },
+    fog: { color: 0x12182a, density: 0.013 },
+    sun: { color: 0x88a4d8, intensity: 0.35, pos: [-20, 50, -20] },
+    hemi: { sky: 0x1a2a45, ground: 0x10131a, intensity: 0.35 },
+    rim: { color: 0xffa84a, intensity: 0.7 }, // warm streetlamp rim
+    cloud: { color: 0x4a5070, emissive: 0.08 },
+    weather: null,
+    city: true,
+    flat: true,
+    nightCity: true,         // buildings get emissive windows
+    vehicleType: 'car',
+    objective: { kind: 'topple', value: 30, text: 'Crush 30 buildings in the dark' },
   },
 
   night: {
@@ -125,6 +154,7 @@ export const LEVELS = {
     rim: { color: 0x88aaff, intensity: 0.55 },
     cloud: { color: 0x6a7090, emissive: 0.1 },
     weather: 'fireflies',
+    objective: { kind: 'hatchBabies', value: 3, text: 'Hatch 3 baby dinos' },
   },
 };
 

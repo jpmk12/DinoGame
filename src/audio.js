@@ -186,14 +186,52 @@ class AudioManager {
   }
 
   plasmaBreath() {
-    // Rising charge whine, then a roaring energy beam blast.
-    this._tone(180, 0.3, 'sawtooth', 0.18, 4.0); // charge sweep up
+    this._tone(180, 0.3, 'sawtooth', 0.18, 4.0);
     setTimeout(() => {
-      // Beam: layered noise + descending growl
       this._noise(0.5, 0.32, 2200, 'bandpass');
       this._tone(320, 0.5, 'sawtooth', 0.3, 0.4);
       this._tone(140, 0.55, 'square', 0.22, 0.5);
     }, 280);
+  }
+
+  abilityRoar() {
+    // Massive falling roar
+    this._tone(220, 0.7, 'sawtooth', 0.35, 0.35);
+    this._noise(0.6, 0.25, 500);
+    setTimeout(() => this._tone(120, 0.5, 'sawtooth', 0.28, 0.5), 200);
+  }
+
+  abilityCharge() {
+    // Thundering hoofbeats — repeated low thumps
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => this._noise(0.08, 0.3, 180), i * 90);
+    }
+    this._tone(70, 0.6, 'sawtooth', 0.25, 0.7);
+  }
+
+  abilitySweep() {
+    // Whooshing tail swipe
+    this._noise(0.35, 0.3, 1200, 'bandpass');
+    this._tone(180, 0.25, 'sine', 0.18, 0.4);
+  }
+
+  abilityPounce() {
+    // Quick upward "whip" + landing thud
+    this._tone(450, 0.15, 'sine', 0.2, 2.0);
+    setTimeout(() => this._noise(0.12, 0.35, 300), 200);
+  }
+
+  abilityStomp() {
+    // Earth-shaking thud
+    this._tone(50, 0.4, 'sawtooth', 0.4, 0.5);
+    this._noise(0.4, 0.35, 150);
+  }
+
+  abilityFrenzy() {
+    // Frantic rising chime
+    this._tone(440, 0.1, 'sawtooth', 0.18, 1.8);
+    setTimeout(() => this._tone(660, 0.12, 'sawtooth', 0.2, 1.8), 80);
+    setTimeout(() => this._tone(880, 0.18, 'sawtooth', 0.22, 1.5), 170);
   }
 }
 

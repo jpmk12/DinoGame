@@ -293,11 +293,10 @@ html, body {
   to   { box-shadow: 0 0 14px rgba(255, 232, 138, 0.95); }
 }
 
-/* ---------- Menu button (top-right, always reachable during play) ---------- */
-#menu-btn {
+/* ---------- Menu / Pause buttons (top-right) ---------- */
+#menu-btn, #pause-btn {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 12px);
-  right: 12px;
   z-index: 15;
   padding: 8px 14px;
   font-family: inherit;
@@ -312,8 +311,10 @@ html, body {
   text-shadow: 1px 1px 0 #000;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
 }
+#menu-btn  { right: 12px; }
+#pause-btn { right: 96px; padding: 8px 12px; font-size: 18px; }
 
-#menu-btn:active {
+#menu-btn:active, #pause-btn:active {
   transform: scale(0.92);
 }
 
@@ -414,16 +415,27 @@ html, body {
   z-index: 20;
 }
 
-#joystick {
+/* Invisible joystick zone covering the left half of the screen (below
+   the HUD strip). Tapping anywhere here spawns the floating joystick. */
+#joystick-zone {
   position: absolute;
-  left: calc(env(safe-area-inset-left, 0px) + 24px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 32px);
+  left: 0;
+  top: 100px;
+  width: 55vw;
+  bottom: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#joystick {
+  position: fixed;
+  /* left/top set dynamically by controls.js when the user touches */
   width: 130px;
   height: 130px;
-  background: rgba(255, 255, 255, 0.2);
-  border: 4px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.18);
+  border: 4px solid rgba(255, 255, 255, 0.55);
   border-radius: 50%;
-  pointer-events: auto;
+  pointer-events: none;
   touch-action: none;
 }
 
@@ -809,4 +821,304 @@ html, body {
   word-break: break-word;
   font-size: 12px;
   margin: 0;
+}
+
+/* ---------- Objective toast ---------- */
+#objective-toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid #ffd24a;
+  border-radius: 14px;
+  padding: 6px 14px;
+  color: #fff4d0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 0 #000;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+#objective-progress {
+  background: rgba(255, 210, 74, 0.25);
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Stats panel on title screen ---------- */
+#stats-toggle {
+  margin-top: 14px;
+  padding: 8px 18px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 3px solid #2a5a3a;
+  border-radius: 14px;
+  font-family: inherit;
+  font-weight: 800;
+  color: #2a5a3a;
+  cursor: pointer;
+}
+
+#stats-toggle:active {
+  transform: scale(0.95);
+}
+
+#stats-panel {
+  margin-top: 14px;
+  width: min(94vw, 480px);
+  background: rgba(255, 255, 255, 0.9);
+  border: 3px solid #2a5a3a;
+  border-radius: 16px;
+  padding: 14px;
+  color: #2a5a3a;
+}
+
+#stats-panel h3 {
+  font-size: 16px;
+  font-weight: 900;
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+}
+
+#stats-panel h4 {
+  font-size: 13px;
+  font-weight: 900;
+  margin: 10px 0 6px;
+}
+
+#stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.stat-level-card {
+  background: #fff;
+  border: 2px solid #2a5a3a;
+  border-radius: 10px;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.stat-level-card .stat-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.stat-level-card.completed {
+  border-color: #ffaa44;
+  background: #fff4d0;
+}
+
+.stat-level-card .stat-score {
+  font-size: 10px;
+  color: #5a7a3a;
+  margin-top: 2px;
+}
+
+#stats-ach-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.ach-chip {
+  font-size: 18px;
+  background: #fff;
+  border: 2px solid #2a5a3a;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: grayscale(0.85) opacity(0.5);
+}
+
+.ach-chip.unlocked {
+  filter: none;
+  border-color: #ffaa44;
+  background: #fff4d0;
+}
+
+/* ---------- Level clear screen ---------- */
+#level-clear {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, rgba(255, 210, 74, 0.5) 0%, transparent 60%),
+    rgba(20, 60, 40, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 96;
+  padding: 24px;
+  text-align: center;
+}
+
+#level-clear h2 {
+  font-size: clamp(28px, 8vw, 56px);
+  font-weight: 900;
+  color: #ffd24a;
+  text-shadow: 4px 4px 0 #5a3a0a, 8px 8px 0 rgba(0, 0, 0, 0.3);
+  letter-spacing: 2px;
+  animation: winTitle 1.2s ease-out;
+}
+
+#level-clear-sub {
+  font-size: clamp(14px, 4vw, 20px);
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+  font-weight: 700;
+}
+
+#level-clear-score {
+  font-size: clamp(18px, 5vw, 26px);
+  font-weight: 900;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8px 24px;
+  border-radius: 16px;
+}
+
+#level-clear-best {
+  font-size: 18px;
+  font-weight: 900;
+  color: #ffd24a;
+  text-shadow: 2px 2px 0 #5a3a0a;
+  animation: bestPulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes bestPulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.08); }
+}
+
+.level-clear-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#level-clear-continue, #level-clear-menu {
+  padding: 12px 22px;
+  font-size: 16px;
+  font-weight: 900;
+  font-family: inherit;
+  border: 4px solid #fff;
+  border-radius: 16px;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+
+#level-clear-continue { background: #ffd24a; color: #2a5a3a; }
+#level-clear-menu    { background: #fff;    color: #2a5a3a; }
+
+/* ---------- Pause overlay ---------- */
+#pause-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  z-index: 88;
+  padding: 24px;
+  text-align: center;
+}
+
+#pause-overlay h2 {
+  font-size: clamp(36px, 10vw, 64px);
+  color: #fff;
+  text-shadow: 4px 4px 0 #000;
+  letter-spacing: 4px;
+}
+
+.pause-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#resume-btn, #pause-menu-btn {
+  padding: 14px 26px;
+  font-size: 18px;
+  font-weight: 900;
+  font-family: inherit;
+  border: 4px solid #fff;
+  border-radius: 16px;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+
+#resume-btn      { background: #ffd24a; color: #2a5a3a; }
+#pause-menu-btn  { background: #fff;    color: #2a5a3a; }
+
+/* ---------- Achievement toast ---------- */
+#achievement-toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 60px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #ffd24a 0%, #ffaa44 100%);
+  border: 4px solid #fff;
+  border-radius: 18px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 60;
+  pointer-events: none;
+  max-width: 92vw;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  animation: achToast 4s ease-out forwards;
+}
+
+#ach-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.ach-title {
+  font-size: 11px;
+  font-weight: 900;
+  color: #5a3a0a;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+#ach-name {
+  font-size: 16px;
+  font-weight: 900;
+  color: #2a5a3a;
+  letter-spacing: 0.5px;
+}
+
+#ach-desc {
+  font-size: 12px;
+  color: #2a5a3a;
+  opacity: 0.85;
+}
+
+@keyframes achToast {
+  0%   { opacity: 0; transform: translate(-50%, -16px); }
+  10%  { opacity: 1; transform: translate(-50%, 0); }
+  85%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -8px); }
 }

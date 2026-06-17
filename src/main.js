@@ -20,6 +20,8 @@ import {
 } from './entities.js';
 import { SPECIES, PLAYABLE_SPECIES } from './dinos.js';
 import { preloadAllModels, modelStatus } from './modelLoader.js';
+import * as save from './save.js';
+import * as haptics from './haptics.js';
 import { audio } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import {
@@ -221,12 +223,24 @@ const power = {
   timeLeft: 0,
 };
 
-// Titan Plasma Breath state
-const PLASMA_COOLDOWN = 3;   // seconds between blasts
-let plasmaCooldown = 0;
-let plateFlash = 0;          // glow boost on the dorsal plates when firing
-let beamMesh = null;         // active beam visual
+// Species ability state — each playable species has one signature move.
+// Cooldown + name vary by species (SPECIES[key].ability).
+let abilityCooldown = 0;
+let activeAbility = null;     // current species ability metadata
+let plateFlash = 0;           // glow boost on Titan's dorsal plates when firing
+let beamMesh = null;          // active plasma beam visual
 let beamLife = 0;
+
+// Per-ability state used by charge / pounce / frenzy / etc.
+let chargeTimer = 0;
+let pounceTimer = 0;
+let pounceStart = new THREE.Vector3();
+let pounceEnd = new THREE.Vector3();
+let frenzyTimer = 0;
+
+// Pause + level-objective tracking
+let paused = false;
+let runStats = null;          // counters specific to the current run for objectives
 
 // HUD elements
 const hudEl = document.getElementById('hud');
@@ -259,9 +273,28 @@ const optMegaCb = document.getElementById('opt-mega');
 const homeIndicator = document.getElementById('home-indicator');
 const compassEl = document.getElementById('compass');
 const menuBtn = document.getElementById('menu-btn');
+const pauseBtn = document.getElementById('pause-btn');
+const pauseOverlay = document.getElementById('pause-overlay');
 const blastBtn = document.getElementById('blast-btn');
+const blastLabel = document.getElementById('blast-label');
 const compassArrow = document.getElementById('compass-arrow');
 const compassDist = document.getElementById('compass-dist');
+const objectiveToast = document.getElementById('objective-toast');
+const objectiveText = document.getElementById('objective-text');
+const objectiveProgress = document.getElementById('objective-progress');
+const levelClearEl = document.getElementById('level-clear');
+const levelClearScore = document.getElementById('level-clear-score');
+const levelClearBest = document.getElementById('level-clear-best');
+const levelClearSub = document.getElementById('level-clear-sub');
+const achToastEl = document.getElementById('achievement-toast');
+const achNameEl = document.getElementById('ach-name');
+const achDescEl = document.getElementById('ach-desc');
+const achIconEl = document.getElementById('ach-icon');
+const statsPanel = document.getElementById('stats-panel');
+const statsToggleBtn = document.getElementById('stats-toggle');
+const statsGrid = document.getElementById('stats-grid');
+const statsAchCount = document.getElementById('stats-ach-count');
+const statsAchList = document.getElementById('stats-ach-list');
 
 // ---------------- Start / restart ----------------
 function applyPlayerScale() {
@@ -283,12 +316,16 @@ function spawnLevelVehicles() {
 
 function startGame(species) {
   audio.unlock();
-  // Read title-screen toggles into the live settings
+  paused = false;
+  pauseOverlay.classList.add('hidden');
+  // Read title-screen toggles into the live settings + persist them
   gameSettings.startGiant = !!(optGiantCb && optGiantCb.checked);
   gameSettings.invincible = !!(optInvincibleCb && optInvincibleCb.checked);
   gameSettings.speedDemon = !!(optSpeedCb && optSpeedCb.checked);
   gameSettings.megaFood = !!(optMegaFoodCb && optMegaFoodCb.checked);
   gameSettings.mega = !!(optMegaCb && optMegaCb.checked);
+  save.saveOptions(gameSettings);
+  save.saveLastPlayed(species, selectedLevelKey);
 
   // Rebuild world if the chosen level differs from the active one
   if (selectedLevelKey !== getLevelKey()) {
@@ -330,18 +367,36 @@ function startGame(species) {
   hasWon = gameSettings.startGiant; // skip win celebration if you started there
   power.active = null;
   power.timeLeft = 0;
-  plasmaCooldown = 0;
+  abilityCooldown = 0;
+  chargeTimer = pounceTimer = frenzyTimer = 0;
   clearBeam();
-  updatePowerupHUD();
-  hideBabyIndicator();
-  hideEggPrompt();
-  updateInvincibleHUD();
-  // Plasma Breath button only for the Titan
-  if (species === 'titan') {
+
+  // Per-run counters for the objective tracker
+  runStats = {
+    plantsEaten: 0, dinosEaten: 0, crittersEaten: 0, foodsEaten: 0,
+    babiesHatched: 0, buildingsToppled: 0, vehiclesChomped: 0,
+    reachedStage: player.userData.stage, levelCleared: false,
+  };
+
+  // Configure the ability button for this species
+  activeAbility = SPECIES[species] && SPECIES[species].ability || null;
+  if (activeAbility) {
+    blastLabel.textContent = activeAbility.name;
     blastBtn.classList.remove('hidden', 'cooldown');
   } else {
     blastBtn.classList.add('hidden');
   }
+
+  // Stats: count this run
+  save.incStat('timesPlayed');
+  save.incMapStat('levelsPlayed', selectedLevelKey);
+  save.incMapStat('speciesPlayed', species);
+
+  updatePowerupHUD();
+  hideBabyIndicator();
+  hideEggPrompt();
+  updateInvincibleHUD();
+  showObjective();
   resetFacts();
   gameRunning = true;
 
@@ -349,27 +404,58 @@ function startGame(species) {
   hudEl.classList.remove('hidden');
   touchControls.classList.remove('hidden');
   menuBtn.classList.remove('hidden');
+  pauseBtn.classList.remove('hidden');
   titleScreen.classList.add('hidden');
   gameOverEl.classList.add('hidden');
   winScreen.classList.add('hidden');
+  levelClearEl.classList.add('hidden');
 }
 
 // Return to the title screen so the player can change options.
 // Keeps the world rendered behind the title for a clean visual.
 function exitToMenu() {
   gameRunning = false;
+  paused = false;
+  // Final score commit before returning to menu
+  if (score > 0) save.recordBestScore(selectedLevelKey, score);
+  refreshStatsPanel();
   hudEl.classList.add('hidden');
   touchControls.classList.add('hidden');
   menuBtn.classList.add('hidden');
+  pauseBtn.classList.add('hidden');
+  pauseOverlay.classList.add('hidden');
   blastBtn.classList.add('hidden');
+  objectiveToast.classList.add('hidden');
   compassEl.classList.add('hidden');
   homeIndicator.classList.add('hidden');
   gameOverEl.classList.add('hidden');
   winScreen.classList.add('hidden');
+  levelClearEl.classList.add('hidden');
   titleScreen.classList.remove('hidden');
   clearBeam();
 }
 menuBtn.addEventListener('click', exitToMenu);
+
+function togglePause() {
+  if (!gameRunning) return;
+  paused = !paused;
+  if (paused) {
+    pauseOverlay.classList.remove('hidden');
+  } else {
+    pauseOverlay.classList.add('hidden');
+    // Reset the clock so a long pause doesn't produce a giant dt spike
+    clock.getDelta();
+  }
+}
+pauseBtn.addEventListener('click', togglePause);
+document.getElementById('resume-btn').addEventListener('click', () => {
+  if (paused) togglePause();
+});
+document.getElementById('pause-menu-btn').addEventListener('click', () => {
+  paused = false;
+  pauseOverlay.classList.add('hidden');
+  exitToMenu();
+});
 
 function updateInvincibleHUD() {
   if (gameSettings.invincible) invincibleIndicator.classList.remove('hidden');
@@ -525,7 +611,6 @@ function showFact(text) {
   if (!text) return;
   factText.textContent = text;
   factToast.classList.remove('hidden');
-  // restart animation
   factToast.style.animation = 'none';
   void factToast.offsetWidth;
   factToast.style.animation = '';
@@ -533,6 +618,10 @@ function showFact(text) {
   factToastTimer = setTimeout(() => {
     factToast.classList.add('hidden');
   }, 4000);
+  // Track facts seen for the Fact Fan achievement (each shown fact counts)
+  save.incStat('factsSeen');
+  save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player && player.userData.stage });
+  popAchievementToast();
 }
 
 function triggerWin() {
@@ -577,6 +666,8 @@ function hatchEgg(eggRoot) {
   audio.eggHatch();
   shake = Math.max(shake, 0.2);
   score += 15;
+  recordEvent('babiesHatched');
+  haptics.big();
   showFact('A baby hatched! It will help you eat for ' + BABY_DURATION + ' seconds!');
 
   // Spawn the baby — same species as the player for a "your baby" feel
@@ -811,8 +902,17 @@ function chompAnim(d, t) {
 const clock = new THREE.Clock();
 
 function frame() {
-  const dt = Math.min(0.05, clock.getDelta());
+  const rawDt = clock.getDelta();
   controls.update();
+  if (paused) {
+    // Keep the renderer ticking so the pause overlay is responsive, but
+    // don't advance any game state.
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+    return;
+  }
+  const dt = Math.min(0.05, rawDt);
 
   if (gameRunning) {
     updatePlayer(dt);
@@ -825,7 +925,7 @@ function frame() {
     if (buildings) animateBuildings(buildings, dt, particles);
     if (homeNest) animateNest(homeNest, dt);
     updatePowerup(dt);
-    updatePlasma(dt);
+    updateAbility(dt);
     updateHome(dt);
     handleEggInteraction();
     if (buildings) handleBuildings(dt);
@@ -899,6 +999,155 @@ function updateHome(dt) {
   }
 }
 
+// ---------------- Stats / Achievements / Objectives ----------------
+function recordEvent(kind, n = 1) {
+  if (!runStats) return;
+  runStats[kind] = (runStats[kind] || 0) + n;
+  save.incStat(kind, n);
+  save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
+  popAchievementToast();
+  updateObjectiveProgress();
+  checkObjectiveComplete();
+}
+
+let achToastTimer = null;
+function popAchievementToast() {
+  if (achToastTimer) return; // already showing one
+  const key = save.popNewAchievement();
+  if (!key) return;
+  const a = save.ACHIEVEMENTS[key];
+  achIconEl.textContent = a.icon;
+  achNameEl.textContent = a.name;
+  achDescEl.textContent = a.desc;
+  achToastEl.classList.remove('hidden');
+  achToastEl.style.animation = 'none';
+  void achToastEl.offsetWidth;
+  achToastEl.style.animation = '';
+  haptics.big();
+  achToastTimer = setTimeout(() => {
+    achToastEl.classList.add('hidden');
+    achToastTimer = null;
+    popAchievementToast(); // chain
+  }, 4200);
+}
+
+function objectiveCurrent() {
+  if (!runStats) return 0;
+  const obj = getLevel().objective;
+  if (!obj) return 0;
+  switch (obj.kind) {
+    case 'reachStage':     return runStats.reachedStage;
+    case 'eatDinos':       return runStats.dinosEaten;
+    case 'eatCritters':    return runStats.crittersEaten;
+    case 'chompVehicles':  return runStats.vehiclesChomped;
+    case 'hatchBabies':    return runStats.babiesHatched;
+    case 'topple':         return runStats.buildingsToppled;
+    default: return 0;
+  }
+}
+
+function updateObjectiveProgress() {
+  if (!runStats) return;
+  const obj = getLevel().objective;
+  if (!obj) return;
+  objectiveProgress.textContent = Math.min(objectiveCurrent(), obj.value) + '/' + obj.value;
+}
+
+function showObjective() {
+  if (!runStats) return;
+  const obj = getLevel().objective;
+  if (!obj) { objectiveToast.classList.add('hidden'); return; }
+  objectiveText.textContent = obj.text;
+  updateObjectiveProgress();
+  objectiveToast.classList.remove('hidden');
+}
+
+function checkObjectiveComplete() {
+  if (!runStats || runStats.levelCleared) return;
+  const obj = getLevel().objective;
+  if (!obj) return;
+  if (objectiveCurrent() >= obj.value) {
+    runStats.levelCleared = true;
+    triggerLevelClear();
+  }
+}
+
+function triggerLevelClear() {
+  audio.win();
+  const burstPos = player.position.clone();
+  burstPos.y += 5;
+  particles.confetti(burstPos);
+  shake = Math.max(shake, 0.5);
+  haptics.huge();
+  const newBest = save.recordBestScore(selectedLevelKey, score);
+  save.markCompleted(selectedLevelKey);
+  levelClearScore.textContent = 'Score: ' + score;
+  levelClearSub.textContent = getLevel().objective.text + ' — Done!';
+  levelClearBest.classList.toggle('hidden', !newBest);
+  levelClearEl.classList.remove('hidden');
+}
+
+document.getElementById('level-clear-continue').addEventListener('click', () => {
+  levelClearEl.classList.add('hidden');
+});
+document.getElementById('level-clear-menu').addEventListener('click', exitToMenu);
+
+function refreshStatsPanel() {
+  if (!statsGrid) return;
+  const s = save.loadSave();
+  statsGrid.innerHTML = '';
+  for (const key of LEVEL_KEYS) {
+    const lv = LEVELS[key];
+    const card = document.createElement('div');
+    card.className = 'stat-level-card';
+    if (s.completed[key]) card.classList.add('completed');
+    const best = s.bestScores[key] || 0;
+    card.innerHTML = `
+      <div class="stat-icon">${lv.icon}</div>
+      <div>${lv.name}</div>
+      <div class="stat-score">${best > 0 ? 'Best: ' + best : '—'}</div>
+    `;
+    statsGrid.appendChild(card);
+  }
+  const allKeys = Object.keys(save.ACHIEVEMENTS);
+  statsAchCount.textContent = `${s.achievements.length} / ${allKeys.length}`;
+  statsAchList.innerHTML = '';
+  for (const k of allKeys) {
+    const a = save.ACHIEVEMENTS[k];
+    const chip = document.createElement('div');
+    chip.className = 'ach-chip' + (s.achievements.includes(k) ? ' unlocked' : '');
+    chip.textContent = a.icon;
+    chip.title = `${a.name}: ${a.desc}`;
+    statsAchList.appendChild(chip);
+  }
+}
+
+statsToggleBtn.addEventListener('click', () => {
+  const wasHidden = statsPanel.classList.contains('hidden');
+  if (wasHidden) {
+    refreshStatsPanel();
+    statsPanel.classList.remove('hidden');
+    statsToggleBtn.textContent = '📊 Hide stats';
+  } else {
+    statsPanel.classList.add('hidden');
+    statsToggleBtn.textContent = '📊 Show stats';
+  }
+});
+
+function applySavedOptions() {
+  const s = save.loadSave();
+  if (optGiantCb)      optGiantCb.checked      = !!s.options.startGiant;
+  if (optInvincibleCb) optInvincibleCb.checked = !!s.options.invincible;
+  if (optSpeedCb)      optSpeedCb.checked      = !!s.options.speedDemon;
+  if (optMegaFoodCb)   optMegaFoodCb.checked   = !!s.options.megaFood;
+  if (optMegaCb)       optMegaCb.checked       = !!s.options.mega;
+  if (s.lastLevel && LEVELS[s.lastLevel]) selectedLevelKey = s.lastLevel;
+  // Re-render the level picker so the saved selection is highlighted
+  buildLevelPicker();
+}
+applySavedOptions();
+refreshStatsPanel();
+
 // ---------------- Titan Plasma Breath ----------------
 function clearBeam() {
   if (beamMesh) {
@@ -958,9 +1207,11 @@ function consumeInCone(origin, fwd, range, coneCos) {
     addGrowth(ent.userData.nutrition || 2);
     if (ent.userData.kind === 'enemy') {
       score += 10 + ent.userData.stage * 5;
+      recordEvent('dinosEaten');
       spawnEnemy(entities, player.position, player.userData.stage);
     } else {
       score += 3;
+      recordEvent('crittersEaten');
       spawnCritter(entities, player.position);
     }
   });
@@ -971,6 +1222,8 @@ function consumeInCone(origin, fwd, range, coneCos) {
     foods.remove(f);
     addGrowth(f.userData.nutrition || 1);
     score += f.userData.score || 1;
+    recordEvent('foodsEaten');
+    if (f.userData.foodType === 'watermelon') recordEvent('watermelonsEaten');
     spawnFood(foods, player.position, f.userData.foodType);
   });
 
@@ -979,18 +1232,19 @@ function consumeInCone(origin, fwd, range, coneCos) {
     vehicles.remove(v);
     addGrowth(v.userData.nutrition || 3);
     score += v.userData.score || 25;
+    recordEvent('vehiclesChomped');
     setTimeout(() => {
       if (gameRunning && vehicles) spawnVehicle(vehicles, player.position);
     }, 5000);
   });
 
-  // The beam levels buildings outright, regardless of the Titan's size
   if (buildings) {
     let leveled = 0;
     eat(buildings, (b) => {
       if (b.userData.kind !== 'building' || b.userData.falling) return;
       topple(b, origin.x, origin.z);
       score += b.userData.score;
+      recordEvent('buildingsToppled');
       leveled++;
     });
     if (leveled > 0) {
@@ -1003,9 +1257,6 @@ function consumeInCone(origin, fwd, range, coneCos) {
 function firePlasmaBreath() {
   audio.plasmaBreath();
   plateFlash = 0.6;
-  plasmaCooldown = PLASMA_COOLDOWN;
-  blastBtn.classList.add('cooldown');
-  // Beam fires after the charge sweep, synced with the sound
   setTimeout(() => {
     if (!gameRunning || !player || player.userData.species !== 'titan') return;
     const yaw = player.rotation.y;
@@ -1016,27 +1267,168 @@ function firePlasmaBreath() {
     mouth.add(fwd.clone().multiplyScalar(scale));
     spawnBeam(mouth, fwd, scale);
     shake = Math.max(shake, 0.4);
+    haptics.huge();
     const range = 20 + scale * 6;
     consumeInCone(mouth, fwd, range, Math.cos(0.5));
   }, 280);
 }
 
-function updatePlasma(dt) {
-  const isTitan = player.userData.species === 'titan';
+// ---- Per-species ability implementations ----
+function fireRoar() {
+  audio.abilityRoar();
+  particles.sparkles(player.position.clone().add(new THREE.Vector3(0, 2, 0)));
+  shake = Math.max(shake, 0.3);
+  haptics.big();
+  // All enemies within 22 units flee for 3 seconds regardless of size
+  if (!entities) return;
+  for (const ent of entities.children) {
+    if (ent.userData.kind === 'enemy' || ent.userData.kind === 'critter') {
+      const d = ent.position.distanceTo(player.position);
+      if (d < 22) ent.userData.fleeTimer = 3.0;
+    }
+  }
+}
 
-  if (plasmaCooldown > 0) {
-    plasmaCooldown -= dt;
-    if (plasmaCooldown <= 0) {
-      plasmaCooldown = 0;
+function fireCharge() {
+  audio.abilityCharge();
+  chargeTimer = 1.4; // seconds of charge
+  haptics.big();
+  shake = Math.max(shake, 0.2);
+}
+
+function fireSweep() {
+  audio.abilitySweep();
+  particles.dust(player.position);
+  shake = Math.max(shake, 0.3);
+  haptics.big();
+  // 360° area: vaporize anything within 9 units, including buildings
+  const here = player.position;
+  const r = 9 + player.scale.x * 1.5;
+  consumeAround(here, r);
+}
+
+function firePounce() {
+  audio.abilityPounce();
+  // Leap forward in current facing direction
+  const yaw = player.rotation.y;
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  pounceStart.copy(player.position);
+  pounceEnd.copy(player.position).add(fwd.multiplyScalar(12));
+  pounceTimer = 0.45;
+}
+
+function fireStomp() {
+  audio.abilityStomp();
+  particles.dust(player.position);
+  shake = Math.max(shake, 0.6);
+  haptics.huge();
+  // Stun all enemies within 16 units for 2s
+  if (!entities) return;
+  for (const ent of entities.children) {
+    if (ent.userData.kind === 'enemy' || ent.userData.kind === 'critter') {
+      const d = ent.position.distanceTo(player.position);
+      if (d < 16) ent.userData.stunTimer = 2.0;
+    }
+  }
+}
+
+function fireFrenzy() {
+  audio.abilityFrenzy();
+  particles.sparkles(player.position.clone().add(new THREE.Vector3(0, 1, 0)));
+  frenzyTimer = 5.0;
+  haptics.big();
+}
+
+function fireAbility(kind) {
+  if (!activeAbility) return;
+  abilityCooldown = activeAbility.cooldown;
+  blastBtn.classList.add('cooldown');
+  save.incStat('abilityUses');
+  if (kind === 'plasma') {
+    save.incStat('plasmaUses');
+    firePlasmaBreath();
+  } else if (kind === 'roar')   fireRoar();
+  else if (kind === 'charge')   fireCharge();
+  else if (kind === 'sweep')    fireSweep();
+  else if (kind === 'pounce')   firePounce();
+  else if (kind === 'stomp')    fireStomp();
+  else if (kind === 'frenzy')   fireFrenzy();
+  save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
+  popAchievementToast();
+}
+
+// AOE consume (Sweep). Hits enemies, critters, food, vehicles, buildings.
+function consumeAround(origin, range) {
+  const r2 = range * range;
+  const check = (group, handler) => {
+    if (!group) return;
+    for (let i = group.children.length - 1; i >= 0; i--) {
+      const obj = group.children[i];
+      const dx = obj.position.x - origin.x;
+      const dz = obj.position.z - origin.z;
+      if (dx * dx + dz * dz > r2) continue;
+      handler(obj);
+    }
+  };
+  check(entities, (ent) => {
+    if (ent.userData.kind !== 'enemy' && ent.userData.kind !== 'critter') return;
+    particles.meat(ent.position);
+    entities.remove(ent);
+    addGrowth(ent.userData.nutrition || 2);
+    if (ent.userData.kind === 'enemy') {
+      score += 10 + ent.userData.stage * 5;
+      recordEvent('dinosEaten');
+      spawnEnemy(entities, player.position, player.userData.stage);
+    } else {
+      score += 3;
+      recordEvent('crittersEaten');
+      spawnCritter(entities, player.position);
+    }
+  });
+  check(foods, (f) => {
+    const pType = f.userData.particleType || 'leaves';
+    if (particles[pType]) particles[pType](f.position);
+    foods.remove(f);
+    addGrowth(f.userData.nutrition || 1);
+    score += f.userData.score || 1;
+    recordEvent('foodsEaten');
+    if (f.userData.foodType === 'watermelon') recordEvent('watermelonsEaten');
+    spawnFood(foods, player.position, f.userData.foodType);
+  });
+  check(vehicles, (v) => {
+    particles.debris(v.position);
+    vehicles.remove(v);
+    addGrowth(v.userData.nutrition || 3);
+    score += v.userData.score || 25;
+    recordEvent('vehiclesChomped');
+    setTimeout(() => { if (gameRunning && vehicles) spawnVehicle(vehicles, player.position); }, 5000);
+  });
+  if (buildings) {
+    let leveled = 0;
+    check(buildings, (b) => {
+      if (b.userData.kind !== 'building' || b.userData.falling) return;
+      topple(b, origin.x, origin.z);
+      score += b.userData.score;
+      recordEvent('buildingsToppled');
+      leveled++;
+    });
+    if (leveled > 0) { audio.crumble(); shake = Math.max(shake, 0.4); }
+  }
+}
+
+function updateAbility(dt) {
+  if (abilityCooldown > 0) {
+    abilityCooldown -= dt;
+    if (abilityCooldown <= 0) {
+      abilityCooldown = 0;
       blastBtn.classList.remove('cooldown');
     }
   }
-
-  if (isTitan && controls.blastPressed && plasmaCooldown <= 0) {
-    firePlasmaBreath();
+  if (activeAbility && controls.blastPressed && abilityCooldown <= 0) {
+    fireAbility(activeAbility.kind);
   }
 
-  // Dorsal plate glow flares while firing, then settles
+  // Dorsal plate glow flares while firing, then settles (Titan only)
   if (plateFlash > 0) {
     plateFlash = Math.max(0, plateFlash - dt);
     const plates = player.userData.parts && player.userData.parts.plates;
@@ -1045,12 +1437,29 @@ function updatePlasma(dt) {
     }
   }
 
-  // Fade out the beam
+  // Fade out the plasma beam
   if (beamMesh) {
     beamLife -= dt;
     beamMesh.material.opacity = Math.max(0, beamLife / 0.4) * 0.85;
     if (beamLife <= 0) clearBeam();
   }
+
+  // Pounce: arc forward and auto-eat on landing
+  if (pounceTimer > 0) {
+    const t = 1 - pounceTimer / 0.45;
+    pounceTimer = Math.max(0, pounceTimer - dt);
+    player.position.x = pounceStart.x + (pounceEnd.x - pounceStart.x) * t;
+    player.position.z = pounceStart.z + (pounceEnd.z - pounceStart.z) * t;
+    if (pounceTimer === 0) {
+      // Landing burst — eat anything close
+      consumeAround(player.position, 3.5 * Math.max(1, player.scale.x));
+      shake = Math.max(shake, 0.25);
+      particles.dust(player.position);
+    }
+  }
+
+  // Frenzy: 5s of apex eating, handled in handleEating via gameSettings flag
+  if (frenzyTimer > 0) frenzyTimer = Math.max(0, frenzyTimer - dt);
 }
 
 function updatePowerup(dt) {
@@ -1071,32 +1480,45 @@ function updatePlayer(dt) {
   const speedMult = player.userData.speedMult || 1.0;
   const powerSpeed = power.active === 'speed' ? 2.0 : 1.0;
   const demonSpeed = gameSettings.speedDemon ? 2.0 : 1.0;
-  const baseSpeed = (4 + stage * 0.8) * speedMult * powerSpeed * demonSpeed;
-  const mv = controls.move;
-  const speed = Math.hypot(mv.x, mv.y);
+  const frenzySpeed = frenzyTimer > 0 ? 2.0 : 1.0;
+  let baseSpeed = (4 + stage * 0.8) * speedMult * powerSpeed * demonSpeed * frenzySpeed;
+
+  // Triceratops Charge — short directional burst that runs over things
   let moving = false;
-  if (speed > 0.05) {
-    // Move in world space; camera is fixed orientation, so input maps directly
-    player.position.x += mv.x * baseSpeed * dt;
-    player.position.z += mv.y * baseSpeed * dt;
-    // Face direction of motion (-Z is forward in our dino model)
-    const targetYaw = Math.atan2(-mv.x, -mv.y);
-    let cur = player.rotation.y;
-    let diff = targetYaw - cur;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    player.rotation.y += diff * Math.min(1, dt * 12);
+  if (chargeTimer > 0) {
+    chargeTimer = Math.max(0, chargeTimer - dt);
+    const yaw = player.rotation.y;
+    const dx = -Math.sin(yaw);
+    const dz = -Math.cos(yaw);
+    const chargeSpeed = baseSpeed * 3.0;
+    player.position.x += dx * chargeSpeed * dt;
+    player.position.z += dz * chargeSpeed * dt;
     moving = true;
+    // Sweep-style autoeat in a forward arc as we plow through
+    consumeAround(player.position, player.scale.x * 3);
+    if (Math.random() < 0.6) particles.dust(player.position);
+  } else {
+    const mv = controls.move;
+    const speed = Math.hypot(mv.x, mv.y);
+    if (speed > 0.05) {
+      player.position.x += mv.x * baseSpeed * dt;
+      player.position.z += mv.y * baseSpeed * dt;
+      const targetYaw = Math.atan2(-mv.x, -mv.y);
+      let cur = player.rotation.y;
+      let diff = targetYaw - cur;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      player.rotation.y += diff * Math.min(1, dt * 12);
+      moving = true;
+    }
   }
-  // Clamp to playable area (mountains rise beyond this so the wall feels natural)
+
   const limit = PLAYABLE_RADIUS;
   player.position.x = Math.max(-limit, Math.min(limit, player.position.x));
   player.position.z = Math.max(-limit, Math.min(limit, player.position.z));
 
   animateDino(player, dt, moving);
 
-  // Giant-stage footsteps: thump sound + dust + camera shake.
-  // Mega Mode stomps harder and more often.
   if (moving && stage >= 3) {
     stepThumpTimer -= dt;
     if (stepThumpTimer <= 0) {
@@ -1104,8 +1526,8 @@ function updatePlayer(dt) {
       stepThumpTimer = mega ? 0.4 : (stage >= 4 ? 0.5 : 0.65);
       audio.step();
       particles.dust(player.position);
-      if (mega) shake = Math.max(shake, 0.4);
-      else if (stage >= 4) shake = Math.max(shake, 0.12);
+      if (mega) { shake = Math.max(shake, 0.4); haptics.stomp(); }
+      else if (stage >= 4) { shake = Math.max(shake, 0.12); haptics.tap(); }
     }
   }
 
@@ -1131,6 +1553,29 @@ function updateEntities(dt) {
 
   for (const ent of entities.children) {
     const d = ent.userData;
+
+    // Stun (Stomp ability): freeze in place while the timer runs
+    if (d.stunTimer > 0) {
+      d.stunTimer -= dt;
+      animateDino(ent, dt, false);
+      continue;
+    }
+    // Forced flee (Roar ability): override behavior and run from player
+    if (d.fleeTimer > 0) {
+      d.fleeTimer -= dt;
+      const ax = ent.position.x - player.position.x;
+      const az = ent.position.z - player.position.z;
+      const al = Math.hypot(ax, az) || 1;
+      const sp = (d.speed || 3) * 1.6;
+      ent.position.x += (ax / al) * sp * dt;
+      ent.position.z += (az / al) * sp * dt;
+      ent.rotation.y = Math.atan2(-(ax / al), -(az / al));
+      const lim = PLAYABLE_RADIUS - 2;
+      ent.position.x = Math.max(-lim, Math.min(lim, ent.position.x));
+      ent.position.z = Math.max(-lim, Math.min(lim, ent.position.z));
+      animateDino(ent, dt, true);
+      continue;
+    }
 
     if (d.kind === 'critter') {
       // Wander, flee from player if close
@@ -1238,6 +1683,8 @@ function handleBuildings(dt) {
       topple(b, player.position.x, player.position.z);
       audio.crumble();
       score += b.userData.score;
+      recordEvent('buildingsToppled');
+      haptics.huge();
       shake = Math.max(shake, 0.45);
     } else {
       // Too small — get pushed out of the building's footprint
@@ -1269,6 +1716,8 @@ function handleEating(dt) {
       plants.remove(p);
       addGrowth(p.userData.nutrition * growthMult);
       score += 1;
+      recordEvent('plantsEaten');
+      haptics.tap();
       spawnPlantRandom(plants);
     }
   }
@@ -1294,6 +1743,9 @@ function handleEating(dt) {
         foods.remove(f);
         addGrowth((f.userData.nutrition || 1) * growthMult);
         score += f.userData.score || 1;
+        recordEvent('foodsEaten');
+        if (ft === 'watermelon') recordEvent('watermelonsEaten');
+        haptics.chomp();
         // Respawn the same food type elsewhere to keep biome variety stable
         spawnFood(foods, player.position, ft);
       }
@@ -1312,6 +1764,8 @@ function handleEating(dt) {
         vehicles.remove(v);
         addGrowth((v.userData.nutrition || 1) * growthMult);
         score += v.userData.score || 25;
+        recordEvent('vehiclesChomped');
+        haptics.big();
         showFact('You chomped a ranger jeep! +' + (v.userData.score || 25));
         // A replacement jeep drives in after a short delay
         setTimeout(() => {
@@ -1351,22 +1805,24 @@ function handleEating(dt) {
       entities.remove(ent);
       addGrowth(ent.userData.nutrition * growthMult);
       score += 3;
+      recordEvent('crittersEaten');
+      haptics.chomp();
       showFact(factForCritter());
       spawnCritter(entities, player.position);
     } else if (ent.userData.kind === 'enemy') {
       const enemyScale = ent.userData.scale;
-      const canEat = apex || gameSettings.invincible || playerScale >= enemyScale * 0.95;
+      const canEat = apex || gameSettings.invincible || frenzyTimer > 0 ||
+                     playerScale >= enemyScale * 0.95;
       if (canEat) {
         particles.meat(ent.position);
-        // Sound depends on the enemy's size
         if (ent.userData.stage >= 3) audio.chompBig();
         else audio.chompCritter();
-        // Show fact the first time we eat this species
         showFact(factForSpecies(ent.userData.species));
         entities.remove(ent);
         addGrowth(ent.userData.nutrition * growthMult);
         score += 10 + ent.userData.stage * 5;
-        // Camera shake scales with prey size
+        recordEvent('dinosEaten');
+        haptics.big();
         shake = Math.max(shake, 0.1 + ent.userData.stage * 0.05);
         spawnEnemy(entities, player.position, player.userData.stage);
       } else {
@@ -1395,8 +1851,14 @@ function addGrowth(amount) {
     pos.y += 1;
     particles.sparkles(pos);
     shake = Math.max(shake, 0.25);
+    if (runStats) {
+      runStats.reachedStage = Math.max(runStats.reachedStage || 0, player.userData.stage);
+      save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
+      popAchievementToast();
+      updateObjectiveProgress();
+      checkObjectiveComplete();
+    }
     if (player.userData.stage === 4) {
-      // Reaching GIANT triggers the celebration once per run
       triggerWin();
     }
   }

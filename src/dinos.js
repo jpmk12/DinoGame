@@ -1074,6 +1074,7 @@ export const SPECIES = {
     scaleMult: 1.0,
     diet: 'carnivore',
     playable: true,
+    ability: { kind: 'roar',   name: 'ROAR',   cooldown: 6 },
   },
   titan: {
     name: 'Titan',
@@ -1085,6 +1086,7 @@ export const SPECIES = {
     scaleMult: 1.25,
     diet: 'carnivore',
     playable: true,
+    ability: { kind: 'plasma', name: 'PLASMA', cooldown: 3 },
   },
   trike: {
     name: 'Triceratops',
@@ -1096,6 +1098,7 @@ export const SPECIES = {
     scaleMult: 1.0,
     diet: 'herbivore',
     playable: true,
+    ability: { kind: 'charge', name: 'CHARGE', cooldown: 7 },
   },
   stego: {
     name: 'Stegosaurus',
@@ -1107,6 +1110,7 @@ export const SPECIES = {
     scaleMult: 1.0,
     diet: 'herbivore',
     playable: true,
+    ability: { kind: 'sweep',  name: 'SWEEP',  cooldown: 5 },
   },
   raptor: {
     name: 'Velociraptor',
@@ -1118,6 +1122,7 @@ export const SPECIES = {
     scaleMult: 0.7,
     diet: 'carnivore',
     playable: true,
+    ability: { kind: 'pounce', name: 'POUNCE', cooldown: 4 },
   },
   brachio: {
     name: 'Brachiosaurus',
@@ -1129,6 +1134,7 @@ export const SPECIES = {
     scaleMult: 1.3,
     diet: 'herbivore',
     playable: true,
+    ability: { kind: 'stomp',  name: 'STOMP',  cooldown: 6 },
   },
   spino: {
     name: 'Spinosaurus',
@@ -1140,6 +1146,7 @@ export const SPECIES = {
     scaleMult: 1.1,
     diet: 'carnivore',
     playable: true,
+    ability: { kind: 'frenzy', name: 'FRENZY', cooldown: 12 },
   },
   anky: {
     name: 'Ankylosaurus',

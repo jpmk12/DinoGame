@@ -29,45 +29,56 @@ export class Controls {
   }
 
   _setupJoystick() {
+    // Floating joystick: an invisible zone covers the left half of the
+    // screen (excluding the top HUD area). When the user taps anywhere
+    // in that zone, the joystick spawns at the touch point and follows
+    // their finger from there. On release it disappears.
+    const zone = document.getElementById('joystick-zone');
     const j = document.getElementById('joystick');
     const knob = document.getElementById('joystick-knob');
-    if (!j || !knob) return;
+    if (!zone || !j || !knob) return;
     let activeId = null;
-    const radius = 50;
+    let anchorX = 0, anchorY = 0;
+    const radius = 55;
+    this._touchMove = { x: 0, y: 0 };
 
     const reset = () => {
       knob.style.transform = 'translate(-50%, -50%)';
+      j.classList.add('hidden');
       this._touchMove = { x: 0, y: 0 };
     };
-    this._touchMove = { x: 0, y: 0 };
 
-    const update = (clientX, clientY) => {
-      const rect = j.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      let dx = clientX - cx;
-      let dy = clientY - cy;
+    const place = (cx, cy) => {
+      anchorX = cx;
+      anchorY = cy;
+      j.style.left = (cx - radius - 10) + 'px';
+      j.style.top  = (cy - radius - 10) + 'px';
+      j.classList.remove('hidden');
+    };
+
+    const update = (cx, cy) => {
+      let dx = cx - anchorX;
+      let dy = cy - anchorY;
       const dist = Math.hypot(dx, dy);
       if (dist > radius) {
         dx = (dx / dist) * radius;
         dy = (dy / dist) * radius;
       }
-      knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-      this._touchMove = {
-        x: dx / radius,
-        y: dy / radius,
-      };
+      knob.style.transform =
+        `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      this._touchMove = { x: dx / radius, y: dy / radius };
     };
 
-    j.addEventListener('touchstart', (e) => {
+    zone.addEventListener('touchstart', (e) => {
       e.preventDefault();
       if (activeId !== null) return;
       const t = e.changedTouches[0];
       activeId = t.identifier;
+      place(t.clientX, t.clientY);
       update(t.clientX, t.clientY);
     }, { passive: false });
 
-    j.addEventListener('touchmove', (e) => {
+    zone.addEventListener('touchmove', (e) => {
       e.preventDefault();
       for (const t of e.changedTouches) {
         if (t.identifier === activeId) {
@@ -86,8 +97,8 @@ export class Controls {
         }
       }
     };
-    j.addEventListener('touchend', end);
-    j.addEventListener('touchcancel', end);
+    zone.addEventListener('touchend', end);
+    zone.addEventListener('touchcancel', end);
   }
 
   _setupChompBtn() {

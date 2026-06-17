@@ -46,6 +46,13 @@
   </div>
 
   <button id="menu-btn" class="hidden" aria-label="Back to menu">☰ Menu</button>
+  <button id="pause-btn" class="hidden" aria-label="Pause">⏸</button>
+
+  <div id="objective-toast" class="hidden">
+    <span id="objective-icon">🎯</span>
+    <span id="objective-text">Reach the GIANT stage</span>
+    <span id="objective-progress"></span>
+  </div>
 
   <div id="compass" class="hidden">
     <div id="compass-arrow">▲</div>
@@ -64,10 +71,11 @@
   </div>
 
   <div id="touch-controls" class="hidden">
-    <div id="joystick">
+    <div id="joystick-zone"></div>
+    <div id="joystick" class="hidden">
       <div id="joystick-knob"></div>
     </div>
-    <button id="blast-btn" class="hidden">PLASMA</button>
+    <button id="blast-btn" class="hidden"><span id="blast-label">PLASMA</span></button>
     <button id="chomp-btn">CHOMP</button>
   </div>
 
@@ -108,6 +116,16 @@
 
     <p class="prompt">Pick your dinosaur:</p>
     <div id="picker"><!-- populated by main.js --></div>
+
+    <div id="stats-panel" class="hidden">
+      <h3>Your stats</h3>
+      <div id="stats-grid"></div>
+      <div id="stats-achievements">
+        <h4>Achievements: <span id="stats-ach-count">0</span></h4>
+        <div id="stats-ach-list"></div>
+      </div>
+    </div>
+    <button id="stats-toggle">📊 Show stats</button>
   </div>
 
   <div id="stage-up" class="hidden">
@@ -126,6 +144,34 @@
     <p class="win-sub">You reached the GIANT stage!</p>
     <div id="win-score">Final Score: 0</div>
     <button id="win-continue">Keep playing</button>
+  </div>
+
+  <div id="level-clear" class="hidden">
+    <h2>LEVEL CLEAR!</h2>
+    <p id="level-clear-sub">You met the objective!</p>
+    <div id="level-clear-score">Score: 0</div>
+    <div id="level-clear-best" class="hidden">🏆 New best!</div>
+    <div class="level-clear-btns">
+      <button id="level-clear-continue">Keep playing</button>
+      <button id="level-clear-menu">Back to menu</button>
+    </div>
+  </div>
+
+  <div id="pause-overlay" class="hidden">
+    <h2>Paused</h2>
+    <div class="pause-btns">
+      <button id="resume-btn">Resume</button>
+      <button id="pause-menu-btn">Back to menu</button>
+    </div>
+  </div>
+
+  <div id="achievement-toast" class="hidden">
+    <div id="ach-icon">🏆</div>
+    <div id="ach-text">
+      <div class="ach-title">Achievement!</div>
+      <div id="ach-name">First Bite</div>
+      <div id="ach-desc">Eat your first plant</div>
+    </div>
   </div>
 
   <div id="error-banner" class="hidden">
