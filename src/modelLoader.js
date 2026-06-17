@@ -154,11 +154,20 @@ function normalizeModel(root, spec) {
   // Also disable frustum culling on SkinnedMesh — Three.js culls based on
   // bind-pose bounds, which often don't cover where the animated vertices
   // actually end up, so animated meshes can vanish even when on screen.
+  // And renormalize skin weights — FBXLoader trims any vertex that had
+  // more than 4 bone influences down to the 4 strongest, but doesn't
+  // rescale the remaining weights so they still sum to 1. The result is
+  // each affected vertex only PARTIALLY follows its bones during animation
+  // and partially stays at bind pose — which looks like stretching, worst
+  // on long bones that swing the most (the shins during a walk cycle).
   root.traverse((obj) => {
     if (obj.isMesh) {
       obj.castShadow = true;
       obj.receiveShadow = true;
-      if (obj.isSkinnedMesh) obj.frustumCulled = false;
+      if (obj.isSkinnedMesh) {
+        obj.frustumCulled = false;
+        if (obj.normalizeSkinWeights) obj.normalizeSkinWeights();
+      }
     }
   });
 
