@@ -37,7 +37,11 @@ const modelMissing = new Set();
 const pendingLoads = new Map();
 
 const MODELS_BASE = './models/';
-const TARGET_LENGTH = 2.0;
+// Normalize every loaded model so its longest horizontal axis is this many
+// world units. Chosen to roughly match the procedural T-Rex's footprint
+// so FBX/GLB dinos render at the same size as the procedural ones once
+// the player's stage scale (0.35 -> 1.9) is applied.
+const TARGET_LENGTH = 4.0;
 
 // Which extension to use for this run. Detected at preload by HEAD-probing
 // the trex file in both formats. 'glb' wins ties since it's lighter.
