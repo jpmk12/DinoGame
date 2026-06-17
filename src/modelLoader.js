@@ -178,6 +178,21 @@ function normalizeModel(root, spec) {
   root.position.x -= center.x;
   root.position.z -= center.z;
   root.position.y -= box2.min.y;
+
+  // CRITICAL for FBX skinning: the boneInverses captured by the original
+  // bind() (at load time, pre-scale) no longer match the bones' current
+  // world transforms after the scale we just applied. Without recomputing
+  // them here, the skeleton tells the shader "this bone moved from its
+  // bind pose by (scale factor)" every frame and vertices skin toward the
+  // wrong target — most visibly on the lower legs / shins. Re-bind so the
+  // inverses match the post-normalize bones.
+  root.updateMatrixWorld(true);
+  root.traverse((obj) => {
+    if (obj.isSkinnedMesh && obj.skeleton) {
+      obj.skeleton.calculateInverses();
+      obj.bind(obj.skeleton, obj.matrixWorld);
+    }
+  });
 }
 
 /**
