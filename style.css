@@ -839,6 +839,22 @@ html, body {
   margin: 0;
 }
 
+/* ---------- Model status (title screen) ---------- */
+.model-status {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2a5a3a;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 4px 12px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+.model-status.glb {
+  background: rgba(255, 210, 74, 0.85);
+  color: #5a3a0a;
+}
+
 /* ---------- Boss health bar ---------- */
 #boss-bar {
   position: fixed;

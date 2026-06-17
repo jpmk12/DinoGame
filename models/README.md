@@ -1,10 +1,56 @@
-# 3D Models
+# Animated dinosaur models — `/models/`
 
-This folder is **optional**. The game runs perfectly with procedural low-poly dinos. Drop Quaternius `.glb` files here to upgrade the visuals.
+Drop the Quaternius **Ultimate Animated Dinosaurs Pack** (free CC0) in here
+and the game will swap its procedural box-dinos for fully-rigged,
+animated models — walking, running, attacking, the whole thing. This is the
+**single biggest visual upgrade** available without changing any code.
 
-## Expected file names
+## Quick setup (5 minutes)
 
-The game looks for these files. Anything it can't find falls back to the built-in procedural mesh, automatically.
+### 1. Download the pack
+
+Pick one of these (both are the same free CC0 pack):
+
+- https://quaternius.com/packs/animatedultimatedinosaurs.html
+- https://quaternius.itch.io/lowpoly-animated-dinosaurs
+
+### 2. Unzip it anywhere
+
+You'll get a folder like `UltimateAnimatedDinosaurs/` containing GLB files
+(possibly under a subfolder named `GLB/`, `Models/`, or similar).
+
+### 3. Run the install script
+
+From the repo root, on macOS / Linux:
+
+```sh
+./scripts/install-quaternius.sh /path/to/UltimateAnimatedDinosaurs
+```
+
+On Windows, use Git Bash (comes with Git for Windows) the same way:
+
+```sh
+./scripts/install-quaternius.sh "C:/Downloads/UltimateAnimatedDinosaurs"
+```
+
+The script searches recursively for matching `.glb` files using common
+naming variations and copies them into `/models/` with the names the game
+expects. It prints `[ok]` / `[miss]` for each species.
+
+### 4. Refresh the game
+
+Hard-refresh the page. The title screen will now show a gold badge under
+the dino picker like:
+
+> 🦴 8 / 9 animated GLB models loaded
+
+If you see that, the dinos are now animated. Anything that didn't get a
+GLB falls back automatically to its procedural mesh.
+
+## Expected filenames
+
+The game looks for these exact names in `/models/`. Anything missing falls
+back to the procedural mesh; the game never breaks.
 
 ```
 Tyrannosaurus.glb
@@ -18,27 +64,32 @@ Parasaurolophus.glb
 Pteranodon.glb
 ```
 
-## Where to get the models
+The Titan (Plasma Breath beam-monster) is procedural-only by design.
 
-**Quaternius — Ultimate Animated Dinosaur Pack** (CC0 / public domain):
+## Manual install if the script can't find your files
 
-- Main site: https://quaternius.com/packs/animatedultimatedinosaurs.html
-- Itch.io mirror: https://quaternius.itch.io/lowpoly-animated-dinosaurs
-
-Both distribute a ZIP containing GLB/FBX files. Download, unzip, then copy the GLBs into this folder. The filenames in the pack may not match exactly — rename them to match the list above.
-
-## Quick setup
-
-From the repo root:
+If your pack uses unusual filenames, copy them manually:
 
 ```sh
-./scripts/fetch-quaternius.sh
+cp YourFile.glb  ./models/Tyrannosaurus.glb
 ```
 
-The script prints the latest direct-download URLs and walks you through unzipping into this folder. Because Quaternius distribution links change over time, the script is interactive rather than fully automated.
+## How it works under the hood
 
-## Notes
+- `src/modelLoader.js` does a single HEAD probe on `models/Tyrannosaurus.glb`
+  at startup. If it 404s, nothing tries to load — the game runs on
+  procedural meshes with no console noise.
+- When at least one file exists, it lazy-loads `GLTFLoader` and
+  `SkeletonUtils` from the Three.js CDN.
+- Each model is loaded once, then cloned per instance. `SkeletonUtils.clone`
+  is used so multiple Raptors (or whatever) each get their own skeleton —
+  they don't all animate in lockstep.
+- A `THREE.AnimationMixer` is attached per instance with named actions
+  keyed by clip name. The first found `idle` / `idle_a` / `stand` /
+  `(first clip)` is auto-played.
+- The game loop ticks every active mixer each frame in `pumpMixers(dt)`.
 
-- The loader auto-scales each model to roughly the same length, centers it on (x, z), and drops its feet to y=0 — so different model sizes don't matter.
-- Animation: GLB models currently use a simple whole-body bob. Built-in skeletal animations (if the pack includes them) aren't wired up yet — that's a future enhancement.
-- Loading is async and parallel. The game starts immediately with procedural dinos; GLBs swap in as they finish loading.
+If you want fancier animation behavior (walk while moving, attack on
+chomp, etc.), the hook is in `main.js` — search for `pumpMixers`. The
+mixers and named actions are exposed via `instance.userData.actions` so
+you can `.play()` / `.crossFadeTo()` whichever clip you want from anywhere.

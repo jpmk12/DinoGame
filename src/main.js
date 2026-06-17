@@ -19,7 +19,7 @@ import {
   MAX_GROWTH,
 } from './entities.js';
 import { SPECIES, PLAYABLE_SPECIES } from './dinos.js';
-import { preloadAllModels, modelStatus, attachMixer } from './modelLoader.js';
+import { preloadAllModels, modelStatus, attachMixer, setMotion } from './modelLoader.js';
 import * as save from './save.js';
 import * as haptics from './haptics.js';
 import { updateWater, buildWaterRect } from './water.js';
@@ -664,10 +664,17 @@ document.getElementById('win-continue').addEventListener('click', () => {
 // Always resolves — missing files just stay on procedural meshes.
 preloadAllModels().then(() => {
   const s = modelStatus();
+  const el = document.getElementById('model-status-text');
+  const wrap = document.getElementById('model-status');
   if (s.loaded.length > 0) {
     console.log(`[DinoGrow] Loaded ${s.loaded.length}/${s.total} GLB models:`, s.loaded);
+    if (el && wrap) {
+      el.textContent = `🦴 ${s.loaded.length} / ${s.total} animated GLB models loaded`;
+      wrap.classList.add('glb');
+    }
   } else {
     console.log('[DinoGrow] Using procedural dinos (no GLB models in /models/).');
+    if (el) el.textContent = 'Using procedural meshes — drop GLBs in /models/ for animated dinos';
   }
 });
 
@@ -1065,6 +1072,7 @@ function pumpMixers(dt) {
   if (entities) for (const e of entities.children) ensure(e);
   for (const b of babies) ensure(b);
 
+  // Tick all mixers
   if (player && player.userData.mixer) player.userData.mixer.update(dt);
   if (entities) {
     for (const e of entities.children) {
@@ -1073,6 +1081,15 @@ function pumpMixers(dt) {
   }
   for (const b of babies) {
     if (b.userData.mixer) b.userData.mixer.update(dt);
+  }
+
+  // Drive player's animation by movement input.
+  if (player && player.userData.mixer) {
+    const mv = controls.move;
+    const sp = Math.hypot(mv.x, mv.y);
+    let target = sp;
+    if (chargeTimer > 0 || pounceTimer > 0) target = 1.0;
+    setMotion(player, target);
   }
 }
 

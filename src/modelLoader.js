@@ -215,8 +215,29 @@ export async function attachMixer(instance, THREE) {
 
   instance.userData.mixer = mixer;
   instance.userData.actions = actions;
+  instance.userData.currentAction = idle || null;
   instance.userData.pendingMixer = false;
   return mixer;
+}
+
+/**
+ * Switch the model's playing animation based on a speed factor (0=idle, 1=run).
+ * Crossfades between idle / walk / run if those clips exist. No-op for
+ * procedural meshes (which keep their hand-coded leg-swing animation).
+ */
+export function setMotion(instance, speedNorm, fade = 0.2) {
+  if (!instance || !instance.userData.actions) return;
+  const acts = instance.userData.actions;
+  const pick = (...names) => names.map((n) => acts[n.toLowerCase()]).find(Boolean);
+  let target;
+  if (speedNorm > 0.7)      target = pick('run', 'gallop', 'walk', 'walking', 'idle', 'idle_a');
+  else if (speedNorm > 0.1) target = pick('walk', 'walking', 'run', 'idle', 'idle_a');
+  else                      target = pick('idle', 'idle_a', 'idle_b', 'stand');
+  if (!target) return;
+  if (instance.userData.currentAction === target) return;
+  if (instance.userData.currentAction) instance.userData.currentAction.fadeOut(fade);
+  target.reset().fadeIn(fade).play();
+  instance.userData.currentAction = target;
 }
 
 export function modelStatus() {
