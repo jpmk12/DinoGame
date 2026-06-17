@@ -337,6 +337,23 @@ export function attachMixer(instance, THREE) {
   if (!_animsLogged.has(speciesTag)) {
     _animsLogged.add(speciesTag);
     console.log('[DinoGrow] Animations for', speciesTag, ':', Object.keys(actions));
+    // Diagnose IK-not-baked: dump how many bones each clip actually animates.
+    // If "walk" / "run" hit far fewer bones than "idle" or the full skeleton
+    // size (>~30 for a quadruped), the lower leg + foot bones are probably
+    // IK targets that need solving at runtime — Three.js doesn't do that,
+    // so those bones sit at bind pose while their parents rotate, which
+    // looks like stretching between hip and ankle.
+    let skeletonBones = 0;
+    instance.traverse((o) => {
+      if (o.isSkinnedMesh && o.skeleton) {
+        skeletonBones = Math.max(skeletonBones, o.skeleton.bones.length);
+      }
+    });
+    for (const clip of clips) {
+      const animated = new Set();
+      for (const track of clip.tracks) animated.add(track.name.split('.')[0]);
+      console.log(`  ↳ ${clip.name}: animates ${animated.size} of ${skeletonBones} bones`);
+    }
   }
   // Prefer a real "Idle" clip; fall back to the first clip only as a last
   // resort. Falling back to clips[0] when it's actually a death/attack
