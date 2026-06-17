@@ -70,6 +70,12 @@ export async function preloadAllModels() {
   }
   if (!modelExt) return [];
 
+  // CRITICAL: load SkeletonUtils before any model can be cloned, so the
+  // cached entries are cloned via SK.clone (with proper bone re-linking)
+  // instead of the standard clone (which shares skeletons and silently
+  // breaks SkinnedMesh rendering for every instance after the first).
+  await getSkeletonUtils();
+
   const promises = [];
   for (const key of Object.keys(SPECIES)) {
     promises.push(tryLoadModel(key));
@@ -78,10 +84,11 @@ export async function preloadAllModels() {
 }
 
 let skUtilsPromise = null;
+let SK_MODULE = null;
 function getSkeletonUtils() {
   if (!skUtilsPromise) {
     skUtilsPromise = import('three/addons/utils/SkeletonUtils.js')
-      .then((mod) => mod)
+      .then((mod) => { SK_MODULE = mod; return mod; })
       .catch(() => null);
   }
   return skUtilsPromise;
@@ -142,11 +149,15 @@ async function tryLoadModel(speciesKey) {
  * orientation and roughly TARGET_LENGTH along its longest horizontal axis.
  */
 function normalizeModel(root, spec) {
-  // Apply shadow casting and tweak materials for the low-poly vibe
+  // Apply shadow casting and tweak materials for the low-poly vibe.
+  // Also disable frustum culling on SkinnedMesh — Three.js culls based on
+  // bind-pose bounds, which often don't cover where the animated vertices
+  // actually end up, so animated meshes can vanish even when on screen.
   root.traverse((obj) => {
     if (obj.isMesh) {
       obj.castShadow = true;
       obj.receiveShadow = true;
+      if (obj.isSkinnedMesh) obj.frustumCulled = false;
     }
   });
 
@@ -202,7 +213,17 @@ export function createDinoMeshSync(speciesKey) {
 
   if (modelCache.has(speciesKey)) {
     const cached = modelCache.get(speciesKey);
-    const inst = cached.clone(true);
+    // Use SkeletonUtils.clone when available — the standard Object3D.clone
+    // makes new SkinnedMesh nodes that still reference the ORIGINAL
+    // skeleton's bones, so animation moves the cached entity instead of
+    // the clone, and the clone renders at the cached position (not the
+    // player's). SK.clone fixes the bone references properly.
+    const inst = (SK_MODULE && SK_MODULE.clone)
+      ? SK_MODULE.clone(cached)
+      : cached.clone(true);
+    // Belt-and-suspenders: ensure SkinnedMesh frustumCulled is off on
+    // the clone too, since clone() doesn't always propagate that.
+    inst.traverse((o) => { if (o.isSkinnedMesh) o.frustumCulled = false; });
     inst.userData.fromGLB = true;
     inst.userData.parts = {};
     inst.userData.animations = cached.userData.animations || [];
@@ -220,28 +241,19 @@ export function createDinoMeshSync(speciesKey) {
  * for procedural meshes or if SkeletonUtils isn't available. Picks the
  * best-matching clip names for idle/walk/run/attack heuristically.
  */
-export async function attachMixer(instance, THREE) {
+export function attachMixer(instance, THREE) {
   if (!instance.userData.fromGLB) return null;
   const clips = instance.userData.animations;
   if (!clips || clips.length === 0) return null;
-
-  // For skinned meshes, the default clone shares the skeleton — re-clone
-  // via SkeletonUtils so animations don't move every other instance.
-  const SK = await getSkeletonUtils();
-  if (SK && SK.clone) {
-    // Replace bones/skin properly. (Call sites add the instance to the
-    // scene after this, so re-cloning is safe.)
-    const re = SK.clone(instance);
-    instance.clear();
-    for (const child of [...re.children]) instance.add(child);
-  }
+  // NOTE: the instance was already SkeletonUtils-cloned in
+  // createDinoMeshSync, so each instance has its own skeleton/bones and we
+  // don't need to re-parent anything here. Just hook up the mixer.
 
   const mixer = new THREE.AnimationMixer(instance);
   const actions = {};
   for (const clip of clips) {
     actions[clip.name.toLowerCase()] = mixer.clipAction(clip);
   }
-  // Pick a reasonable default to play
   const pick = (...names) => names.map((n) => actions[n.toLowerCase()]).find(Boolean);
   const idle = pick('idle', 'idle_a', 'idle_1', 'stand', clips[0].name);
   if (idle) idle.play();
