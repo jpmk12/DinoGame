@@ -51,6 +51,17 @@ export async function preloadAllModels() {
   return Promise.allSettled(promises);
 }
 
+// Lazy-load SkeletonUtils for proper skinned-mesh cloning when GLBs have rigs.
+let skUtilsPromise = null;
+function getSkeletonUtils() {
+  if (!skUtilsPromise) {
+    skUtilsPromise = import('three/addons/utils/SkeletonUtils.js')
+      .then((mod) => mod)
+      .catch(() => null);
+  }
+  return skUtilsPromise;
+}
+
 async function tryLoadModel(speciesKey) {
   if (modelCache.has(speciesKey)) return modelCache.get(speciesKey);
   if (modelMissing.has(speciesKey)) return null;
@@ -75,6 +86,9 @@ async function tryLoadModel(speciesKey) {
         (gltf) => {
           const root = gltf.scene;
           normalizeModel(root, spec);
+          // Keep animations attached to the cached root so each clone can
+          // build its own AnimationMixer + Actions.
+          root.userData.animations = gltf.animations || [];
           modelCache.set(speciesKey, root);
           resolve(root);
         },
@@ -153,17 +167,56 @@ export function createDinoMeshSync(speciesKey) {
   const spec = SPECIES[speciesKey];
   if (!spec) throw new Error(`Unknown species: ${speciesKey}`);
 
-  // If GLB is already cached, use it immediately
   if (modelCache.has(speciesKey)) {
-    const inst = modelCache.get(speciesKey).clone(true);
+    const cached = modelCache.get(speciesKey);
+    const inst = cached.clone(true);
     inst.userData.fromGLB = true;
     inst.userData.parts = {};
+    inst.userData.animations = cached.userData.animations || [];
+    inst.userData.pendingMixer = inst.userData.animations.length > 0;
     return inst;
   }
 
   const proc = spec.build(spec.color);
   proc.userData.fromGLB = false;
   return proc;
+}
+
+/**
+ * Build an AnimationMixer + named actions for a GLB instance. Returns null
+ * for procedural meshes or if SkeletonUtils isn't available. Picks the
+ * best-matching clip names for idle/walk/run/attack heuristically.
+ */
+export async function attachMixer(instance, THREE) {
+  if (!instance.userData.fromGLB) return null;
+  const clips = instance.userData.animations;
+  if (!clips || clips.length === 0) return null;
+
+  // For skinned meshes, the default clone shares the skeleton — re-clone
+  // via SkeletonUtils so animations don't move every other instance.
+  const SK = await getSkeletonUtils();
+  if (SK && SK.clone) {
+    // Replace bones/skin properly. (Call sites add the instance to the
+    // scene after this, so re-cloning is safe.)
+    const re = SK.clone(instance);
+    instance.clear();
+    for (const child of [...re.children]) instance.add(child);
+  }
+
+  const mixer = new THREE.AnimationMixer(instance);
+  const actions = {};
+  for (const clip of clips) {
+    actions[clip.name.toLowerCase()] = mixer.clipAction(clip);
+  }
+  // Pick a reasonable default to play
+  const pick = (...names) => names.map((n) => actions[n.toLowerCase()]).find(Boolean);
+  const idle = pick('idle', 'idle_a', 'idle_1', 'stand', clips[0].name);
+  if (idle) idle.play();
+
+  instance.userData.mixer = mixer;
+  instance.userData.actions = actions;
+  instance.userData.pendingMixer = false;
+  return mixer;
 }
 
 export function modelStatus() {

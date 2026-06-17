@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PLAYABLE_RADIUS, getHeightAt } from './world.js';
 import { buildTree } from './dinos.js';
 import { getLevel } from './levels.js';
+import { buildPondMesh } from './water.js';
 
 // A real-feeling city: a street grid of blocks separated by roads, with
 // building blocks, parks, and an open plaza at spawn. Big dinos topple
@@ -87,6 +88,33 @@ export function buildBuilding(opts = {}) {
   detail.position.set((Math.random() - 0.5) * w * 0.3, h + 0.4, (Math.random() - 0.5) * d * 0.3);
   detail.castShadow = true;
   root.add(detail);
+
+  // Some buildings get a glowing rooftop billboard — extra punch at night
+  if (h >= 12 && Math.random() < 0.18) {
+    const bColors = [0xff5a3a, 0x4adff0, 0xffaa3a, 0xff44aa, 0x88ee66, 0x66aaff];
+    const bgColor = bColors[Math.floor(Math.random() * bColors.length)];
+    const bw = Math.max(w * 1.05, 4);
+    const bh = 1.8 + Math.random() * 0.6;
+    const bill = new THREE.Mesh(
+      new THREE.BoxGeometry(bw, bh, 0.15),
+      new THREE.MeshLambertMaterial({
+        color: bgColor,
+        emissive: bgColor,
+        emissiveIntensity: glowingWindows ? 1.4 : 0.5,
+      })
+    );
+    bill.position.set(0, h + bh / 2 + 1.2, 0);
+    bill.castShadow = true;
+    root.add(bill);
+    for (const px of [-bw / 2 + 0.3, bw / 2 - 0.3]) {
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 1.4, 0.18),
+        new THREE.MeshLambertMaterial({ color: 0x222222 })
+      );
+      post.position.set(px, h + 0.6, 0);
+      root.add(post);
+    }
+  }
 
   root.userData.kind = 'building';
   root.userData.height = h;
@@ -205,13 +233,9 @@ function addPark(group, cx, cz) {
   lot.position.set(cx, 0.03, cz);
   group.add(lot);
 
-  // A pond in some parks
-  if (Math.random() < 0.4) {
-    const pond = new THREE.Mesh(
-      new THREE.CircleGeometry(3 + Math.random() * 2, 18),
-      new THREE.MeshLambertMaterial({ color: 0x3a6abf })
-    );
-    pond.rotation.x = -Math.PI / 2;
+  // A pond in some parks — animated water shader
+  if (Math.random() < 0.45) {
+    const pond = buildPondMesh(3 + Math.random() * 2);
     pond.position.set(cx, 0.05, cz);
     group.add(pond);
   }

@@ -20,8 +20,9 @@ const DEFAULT = {
     watermelonsEaten: 0,
     factsSeen: 0,
     timesPlayed: 0,
-    levelsPlayed: {},      // levelKey -> count
-    speciesPlayed: {},     // speciesKey -> count
+    bossesDefeated: 0,
+    levelsPlayed: {},
+    speciesPlayed: {},
   },
   options: {
     startGiant: false,
@@ -32,6 +33,7 @@ const DEFAULT = {
   },
   lastSpecies: 'trex',
   lastLevel: 'lostWorld',
+  tutorialDone: false,
 };
 
 let cache = null;
@@ -134,7 +136,32 @@ export function saveLastPlayed(species, level) {
   scheduleFlush();
 }
 
+export function tutorialDone() { return !!loadSave().tutorialDone; }
+export function setTutorialDone() {
+  const s = loadSave();
+  s.tutorialDone = true;
+  scheduleFlush();
+}
+
 // ---------------- Achievements ----------------
+// Modes unlocked by beating specific levels. If the gating level isn't
+// completed yet, the toggle is shown disabled with a "Beat X to unlock" hint.
+export const MODE_UNLOCKS = {
+  speedDemon: { level: 'lostWorld',   label: 'Lost World' },
+  megaFood:   { level: 'volcano',     label: 'Volcano Lands' },
+  invincible: { level: 'tundra',      label: 'Frozen Tundra' },
+  startGiant: { level: 'dinoPark',    label: 'Dino Park' },
+  mega:       { level: 'cityRampage', label: 'City Rampage' },
+  // dayNight unlocks after completing Night Forest
+  dayNight:   { level: 'night',       label: 'Night Forest' },
+};
+
+export function isModeUnlocked(modeKey) {
+  const u = MODE_UNLOCKS[modeKey];
+  if (!u) return true;
+  return !!loadSave().completed[u.level];
+}
+
 export const ACHIEVEMENTS = {
   firstBite:     { name: 'First Bite',       desc: 'Eat your first plant',        icon: '🌱' },
   herbivore:     { name: 'Herbivore',        desc: 'Eat 50 plants',               icon: '🌿' },
@@ -149,6 +176,8 @@ export const ACHIEVEMENTS = {
   plasmaMaster:  { name: 'Plasma Master',    desc: 'Use Plasma Breath 10 times',  icon: '⚡' },
   juicy:         { name: 'Juicy',            desc: 'Eat a watermelon',            icon: '🍉' },
   speciesist:    { name: 'Variety',          desc: 'Play 4 different dino species', icon: '🦕' },
+  bossSlayer:    { name: 'Boss Slayer',      desc: 'Defeat your first boss',      icon: '👹' },
+  masterHunter:  { name: 'Master Hunter',    desc: 'Defeat 5 bosses',             icon: '🏹' },
 };
 
 const _newUnlockQueue = [];
@@ -187,6 +216,8 @@ export function checkAchievements({ playedLevelKey, playedSpecies, currentStage 
   if (st.factsSeen >= 10)        unlockAchievement('factFan');
   if (st.plasmaUses >= 10)       unlockAchievement('plasmaMaster');
   if (st.watermelonsEaten >= 1)  unlockAchievement('juicy');
+  if (st.bossesDefeated >= 1)    unlockAchievement('bossSlayer');
+  if (st.bossesDefeated >= 5)    unlockAchievement('masterHunter');
   const lvls = Object.keys(st.levelsPlayed || {}).length;
   if (lvls >= 6)                 unlockAchievement('worldTour');
   const sp = Object.keys(st.speciesPlayed || {}).length;

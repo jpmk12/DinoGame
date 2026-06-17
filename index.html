@@ -48,6 +48,16 @@
   <button id="menu-btn" class="hidden" aria-label="Back to menu">☰ Menu</button>
   <button id="pause-btn" class="hidden" aria-label="Pause">⏸</button>
 
+  <div id="tutorial-bubble" class="hidden">
+    <div id="tutorial-text">Tap and drag the left side to move!</div>
+    <button id="tutorial-next">Got it!</button>
+  </div>
+
+  <div id="boss-bar" class="hidden">
+    <div id="boss-name">Boss</div>
+    <div id="boss-hp-bar"><div id="boss-hp-fill"></div></div>
+  </div>
+
   <div id="objective-toast" class="hidden">
     <span id="objective-icon">🎯</span>
     <span id="objective-text">Reach the GIANT stage</span>
@@ -87,30 +97,35 @@
     <div id="level-picker"><!-- populated by main.js --></div>
 
     <div id="settings">
-      <label class="toggle">
+      <label class="toggle" data-mode="startGiant">
         <input type="checkbox" id="opt-giant" />
         <span class="toggle-slider"></span>
         <span class="toggle-label">🦖 Start as Giant</span>
       </label>
-      <label class="toggle">
+      <label class="toggle" data-mode="invincible">
         <input type="checkbox" id="opt-invincible" />
         <span class="toggle-slider"></span>
         <span class="toggle-label">🛡️ Invincible</span>
       </label>
-      <label class="toggle">
+      <label class="toggle" data-mode="speedDemon">
         <input type="checkbox" id="opt-speed" />
         <span class="toggle-slider"></span>
         <span class="toggle-label">🚀 Speed Demon</span>
       </label>
-      <label class="toggle">
+      <label class="toggle" data-mode="megaFood">
         <input type="checkbox" id="opt-megafood" />
         <span class="toggle-slider"></span>
         <span class="toggle-label">🍔 Mega Food</span>
       </label>
-      <label class="toggle">
+      <label class="toggle" data-mode="mega">
         <input type="checkbox" id="opt-mega" />
         <span class="toggle-slider"></span>
         <span class="toggle-label">💥 Mega Mode</span>
+      </label>
+      <label class="toggle" data-mode="dayNight">
+        <input type="checkbox" id="opt-daynight" />
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">🌗 Day / Night Cycle</span>
       </label>
     </div>
 

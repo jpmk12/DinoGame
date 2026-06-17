@@ -255,6 +255,22 @@ html, body {
   letter-spacing: 0.5px;
 }
 
+.toggle.locked {
+  filter: grayscale(0.85) opacity(0.55);
+  pointer-events: none;
+}
+.toggle.locked .toggle-label::before { content: '🔒 '; }
+.toggle.locked .lock-hint {
+  display: block;
+  font-size: 10px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #2a5a3a;
+  font-weight: 600;
+  opacity: 0.9;
+  letter-spacing: 0.3px;
+}
+.lock-hint { display: none; }
+
 /* ---------- Invincible HUD indicator ---------- */
 #invincible-indicator {
   display: inline-block;
@@ -821,6 +837,86 @@ html, body {
   word-break: break-word;
   font-size: 12px;
   margin: 0;
+}
+
+/* ---------- Boss health bar ---------- */
+#boss-bar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(88vw, 420px);
+  z-index: 14;
+  text-align: center;
+  pointer-events: none;
+}
+#boss-name {
+  font-size: 14px;
+  font-weight: 900;
+  color: #ffdf6a;
+  text-shadow: 2px 2px 0 #000, 0 0 8px rgba(255, 90, 60, 0.7);
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+#boss-hp-bar {
+  height: 14px;
+  background: rgba(0,0,0,0.6);
+  border: 3px solid #ffdf6a;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(255, 90, 60, 0.5);
+}
+#boss-hp-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff3a5a, #ff8a3a);
+  transition: width 0.2s ease-out;
+}
+
+/* ---------- Tutorial bubble (first-run hints) ---------- */
+#tutorial-bubble {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 200px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  color: #2a5a3a;
+  border: 4px solid #2a5a3a;
+  border-radius: 18px;
+  padding: 14px 18px;
+  max-width: 86vw;
+  text-align: center;
+  z-index: 50;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.25);
+}
+
+#tutorial-text {
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+#tutorial-next {
+  padding: 8px 18px;
+  background: #ffd24a;
+  border: 3px solid #2a5a3a;
+  border-radius: 14px;
+  font-family: inherit;
+  font-weight: 900;
+  color: #2a5a3a;
+  cursor: pointer;
+}
+
+#tutorial-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-top: 14px solid #2a5a3a;
 }
 
 /* ---------- Objective toast ---------- */

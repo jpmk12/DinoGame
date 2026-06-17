@@ -19,9 +19,11 @@ import {
   MAX_GROWTH,
 } from './entities.js';
 import { SPECIES, PLAYABLE_SPECIES } from './dinos.js';
-import { preloadAllModels, modelStatus } from './modelLoader.js';
+import { preloadAllModels, modelStatus, attachMixer } from './modelLoader.js';
 import * as save from './save.js';
 import * as haptics from './haptics.js';
+import { updateWater, buildWaterRect } from './water.js';
+import { spawnBoss, updateBoss, damageBoss, BOSS_DATA } from './bosses.js';
 import { audio } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import {
@@ -116,6 +118,58 @@ function applyLevelTheme() {
 }
 applyLevelTheme();
 
+// ---- Day/night cycle ----
+// Smoothly transitions sky, sun, hemi, and fog between the level's daytime
+// palette and a generic night palette over a fixed period.
+const NIGHT_HEMI    = { sky: 0x1a2a45, ground: 0x10131a, intensity: 0.30 };
+const NIGHT_SUN     = { color: 0x88a4d8, intensity: 0.30 };
+const NIGHT_SKY     = { top: 0x06091a, mid: 0x14203a, bottom: 0x2a1830, glow: [0.06, 0.04, 0.10] };
+const NIGHT_FOG     = 0x0c1228;
+const CYCLE_SECONDS = 90;
+let dayPhase = Math.PI / 2; // start at midday
+
+const _cA = new THREE.Color();
+const _cB = new THREE.Color();
+function lerpHex(a, b, t) { _cA.setHex(a); _cB.setHex(b); return _cA.lerp(_cB, t); }
+
+function updateDayNight(dt) {
+  if (!gameSettings.dayNight) return;
+  const level = getLevel();
+  // Skip on levels whose entire identity is night
+  if (level.nightCity || level.weather === 'fireflies') return;
+
+  dayPhase = (dayPhase + dt * (Math.PI * 2 / CYCLE_SECONDS)) % (Math.PI * 2);
+  const t = (Math.sin(dayPhase) + 1) / 2; // 0=midnight, 1=noon
+
+  hemi.intensity = level.hemi.intensity * t + NIGHT_HEMI.intensity * (1 - t);
+  hemi.color.copy(lerpHex(NIGHT_HEMI.sky, level.hemi.sky, t));
+  hemi.groundColor.copy(lerpHex(NIGHT_HEMI.ground, level.hemi.ground, t));
+
+  sun.intensity = level.sun.intensity * Math.max(0.08, t);
+  sun.color.copy(lerpHex(NIGHT_SUN.color, level.sun.color, t));
+
+  // Sun arcs across the sky — radius preserved from level's preset.
+  const radius = Math.hypot(level.sun.pos[0], level.sun.pos[2]) || 30;
+  sun.position.x = Math.cos(dayPhase) * radius;
+  sun.position.z = Math.sin(dayPhase) * radius;
+  sun.position.y = Math.max(8, level.sun.pos[1] * (0.3 + t * 0.7));
+
+  const skyMat = worldGroups && worldGroups.sky && worldGroups.sky.material;
+  if (skyMat && skyMat.uniforms) {
+    skyMat.uniforms.topColor.value.copy(lerpHex(NIGHT_SKY.top, level.sky.top, t));
+    skyMat.uniforms.midColor.value.copy(lerpHex(NIGHT_SKY.mid, level.sky.mid, t));
+    skyMat.uniforms.bottomColor.value.copy(lerpHex(NIGHT_SKY.bottom, level.sky.bottom, t));
+    skyMat.uniforms.glow.value.set(
+      NIGHT_SKY.glow[0] * (1 - t) + level.sky.glow[0] * t,
+      NIGHT_SKY.glow[1] * (1 - t) + level.sky.glow[1] * t,
+      NIGHT_SKY.glow[2] * (1 - t) + level.sky.glow[2] * t,
+    );
+  }
+  if (scene.fog && scene.fog.color) {
+    scene.fog.color.copy(lerpHex(NIGHT_FOG, level.fog.color, t));
+  }
+}
+
 // ---------------- Post-processing (bloom) ----------------
 // Lazy-loaded; if the CDN modules fail we silently fall back to direct
 // rendering with no glow. Game still works.
@@ -199,6 +253,8 @@ let eggs = null;         // Group of egg nests
 let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.)
 let vehicles = null;     // Group of vehicles (jeeps or cars, level-dependent)
 let buildings = null;    // Group of destructible city buildings (City Rampage)
+let boss = null;         // current level boss (mesh) or null when defeated
+let bossDefeated = false;
 let babies = [];         // active baby dinos (THREE.Group instances)
 
 // Title-screen game options — read at startGame.
@@ -208,6 +264,7 @@ const gameSettings = {
   speedDemon: false,
   megaFood: false,
   mega: false,
+  dayNight: false,
 };
 let selectedLevelKey = 'lostWorld';
 let homeRegenAccum = 0;
@@ -242,6 +299,15 @@ let frenzyTimer = 0;
 let paused = false;
 let runStats = null;          // counters specific to the current run for objectives
 
+// Tutorial state — a sequence of hint bubbles shown only on first run.
+const TUTORIAL_STEPS = [
+  { text: 'Tap and drag on the LEFT side of the screen to move your dino!' },
+  { text: 'Walk into plants and small critters to EAT them and grow.' },
+  { text: 'Tap CHOMP near eggs to hatch baby helpers. Each dino has a special ABILITY button too!' },
+  { text: 'Reach the GIANT stage to win, then check the OBJECTIVE up top for a bonus goal!' },
+];
+let tutorialStep = -1;
+
 // HUD elements
 const hudEl = document.getElementById('hud');
 const stageLabel = document.getElementById('stage-label');
@@ -270,6 +336,7 @@ const optInvincibleCb = document.getElementById('opt-invincible');
 const optSpeedCb = document.getElementById('opt-speed');
 const optMegaFoodCb = document.getElementById('opt-megafood');
 const optMegaCb = document.getElementById('opt-mega');
+const optDayNightCb = document.getElementById('opt-daynight');
 const homeIndicator = document.getElementById('home-indicator');
 const compassEl = document.getElementById('compass');
 const menuBtn = document.getElementById('menu-btn');
@@ -295,6 +362,25 @@ const statsToggleBtn = document.getElementById('stats-toggle');
 const statsGrid = document.getElementById('stats-grid');
 const statsAchCount = document.getElementById('stats-ach-count');
 const statsAchList = document.getElementById('stats-ach-list');
+const bossBar = document.getElementById('boss-bar');
+const bossNameEl = document.getElementById('boss-name');
+const bossHpFill = document.getElementById('boss-hp-fill');
+const tutorialBubble = document.getElementById('tutorial-bubble');
+const tutorialText = document.getElementById('tutorial-text');
+const tutorialNext = document.getElementById('tutorial-next');
+
+function showTutorialStep(i) {
+  if (i < 0 || i >= TUTORIAL_STEPS.length) {
+    tutorialBubble.classList.add('hidden');
+    save.setTutorialDone();
+    tutorialStep = -1;
+    return;
+  }
+  tutorialStep = i;
+  tutorialText.textContent = TUTORIAL_STEPS[i].text;
+  tutorialBubble.classList.remove('hidden');
+}
+tutorialNext.addEventListener('click', () => showTutorialStep(tutorialStep + 1));
 
 // ---------------- Start / restart ----------------
 function applyPlayerScale() {
@@ -324,6 +410,7 @@ function startGame(species) {
   gameSettings.speedDemon = !!(optSpeedCb && optSpeedCb.checked);
   gameSettings.megaFood = !!(optMegaFoodCb && optMegaFoodCb.checked);
   gameSettings.mega = !!(optMegaCb && optMegaCb.checked);
+  gameSettings.dayNight = !!(optDayNightCb && optDayNightCb.checked);
   save.saveOptions(gameSettings);
   save.saveLastPlayed(species, selectedLevelKey);
 
@@ -334,6 +421,9 @@ function startGame(species) {
     setupWorld();
     if (weather) weather.setKind(getLevel().weather);
   }
+  // Re-apply the day theme each game so the day/night cycle starts fresh
+  applyLevelTheme();
+  dayPhase = Math.PI / 2;
 
   if (player) scene.remove(player);
   if (entities) scene.remove(entities);
@@ -343,6 +433,9 @@ function startGame(species) {
   if (vehicles) scene.remove(vehicles);
   if (buildings) scene.remove(buildings);
   if (homeNest) scene.remove(homeNest);
+  if (boss) { scene.remove(boss); boss = null; }
+  bossDefeated = false;
+  bossBar.classList.add('hidden');
   removeAllBabies();
 
   player = buildPlayer(species);
@@ -363,6 +456,7 @@ function startGame(species) {
   buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
+  if (BOSS_DATA[selectedLevelKey]) boss = spawnBoss(scene, player.position, selectedLevelKey);
   score = 0;
   hasWon = gameSettings.startGiant; // skip win celebration if you started there
   power.active = null;
@@ -399,6 +493,9 @@ function startGame(species) {
   showObjective();
   resetFacts();
   gameRunning = true;
+  // First-run tutorial — show the first bubble at game start
+  if (!save.tutorialDone()) showTutorialStep(0);
+  else tutorialBubble.classList.add('hidden');
 
   updateHUD();
   hudEl.classList.remove('hidden');
@@ -416,9 +513,9 @@ function startGame(species) {
 function exitToMenu() {
   gameRunning = false;
   paused = false;
-  // Final score commit before returning to menu
   if (score > 0) save.recordBestScore(selectedLevelKey, score);
   refreshStatsPanel();
+  refreshUnlockStates();
   hudEl.classList.add('hidden');
   touchControls.classList.add('hidden');
   menuBtn.classList.add('hidden');
@@ -426,6 +523,7 @@ function exitToMenu() {
   pauseOverlay.classList.add('hidden');
   blastBtn.classList.add('hidden');
   objectiveToast.classList.add('hidden');
+  bossBar.classList.add('hidden');
   compassEl.classList.add('hidden');
   homeIndicator.classList.add('hidden');
   gameOverEl.classList.add('hidden');
@@ -529,6 +627,9 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   if (vehicles) scene.remove(vehicles);
   if (buildings) scene.remove(buildings);
   if (homeNest) scene.remove(homeNest);
+  if (boss) { scene.remove(boss); boss = null; }
+  bossDefeated = false;
+  bossBar.classList.add('hidden');
   removeAllBabies();
   player = buildPlayer(species);
   player.userData.stage = lostStage;
@@ -543,6 +644,7 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   vehicles = spawnLevelVehicles();
   buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
+  if (BOSS_DATA[selectedLevelKey]) boss = spawnBoss(scene, player.position, selectedLevelKey);
   homeRegenAccum = 0;
   power.active = null;
   power.timeLeft = 0;
@@ -923,6 +1025,7 @@ function frame() {
     if (foods) animateFoods(foods, dt);
     if (vehicles && animateVehicles(vehicles, dt, player.position)) audio.carHonk();
     if (buildings) animateBuildings(buildings, dt, particles);
+    updateBossTick(dt);
     if (homeNest) animateNest(homeNest, dt);
     updatePowerup(dt);
     updateAbility(dt);
@@ -934,6 +1037,7 @@ function frame() {
   }
   particles.update(dt);
   if (weather && player) weather.update(dt, player.position);
+  updateDayNight(dt);
 
   // Decay screen shake
   if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
@@ -941,9 +1045,35 @@ function frame() {
   // Drift the clouds across the sky
   if (clouds) animateClouds(clouds, dt);
 
+  updateWater(rawDt);
+  pumpMixers(dt);
   if (composer) composer.render();
   else renderer.render(scene, camera);
   requestAnimationFrame(frame);
+}
+
+// GLB skeletal animation: lazily attach a mixer to any instance that has
+// pending animations; tick all active mixers every frame.
+function pumpMixers(dt) {
+  const ensure = (o) => {
+    if (o && o.userData && o.userData.pendingMixer) {
+      o.userData.pendingMixer = false;
+      attachMixer(o, THREE);
+    }
+  };
+  if (player) ensure(player);
+  if (entities) for (const e of entities.children) ensure(e);
+  for (const b of babies) ensure(b);
+
+  if (player && player.userData.mixer) player.userData.mixer.update(dt);
+  if (entities) {
+    for (const e of entities.children) {
+      if (e.userData.mixer) e.userData.mixer.update(dt);
+    }
+  }
+  for (const b of babies) {
+    if (b.userData.mixer) b.userData.mixer.update(dt);
+  }
 }
 
 function updateHome(dt) {
@@ -997,6 +1127,67 @@ function updateHome(dt) {
       compassEl.classList.add('hidden');
     }
   }
+}
+
+// ---------------- Boss handling ----------------
+function updateBossTick(dt) {
+  if (!boss) { bossBar.classList.add('hidden'); return; }
+  const r = updateBoss(boss, dt, player.position);
+  if (r.dead) {
+    onBossDefeated();
+    return;
+  }
+  // Boss touched the player — knockback + damage if vulnerable
+  if (r.hit && !boss.userData.dying) {
+    if (!gameSettings.invincible && frenzyTimer <= 0 && chargeTimer <= 0) {
+      const playerScale = player.scale.x;
+      const enemyScale = boss.userData.scaleVal;
+      if (playerScale < enemyScale * 0.95) {
+        // Boss eats player → game over
+        gameOver();
+        return;
+      }
+    }
+    // Knockback + small chomp-damage from contact
+    const dx = player.position.x - boss.position.x;
+    const dz = player.position.z - boss.position.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const push = 2.5;
+    boss.position.x -= (dx / len) * push;
+    boss.position.z -= (dz / len) * push;
+    const reward = damageBoss(boss, 1);
+    audio.chompBig();
+    shake = Math.max(shake, 0.2);
+    if (reward > 0) {
+      score += reward;
+      onBossDefeated();
+    }
+  }
+  // Update healthbar
+  bossBar.classList.remove('hidden');
+  bossNameEl.textContent = boss.userData.name;
+  const pct = (boss.userData.health / boss.userData.maxHealth) * 100;
+  bossHpFill.style.width = pct + '%';
+}
+
+function onBossDefeated() {
+  if (bossDefeated) return;
+  bossDefeated = true;
+  const pos = boss ? boss.position.clone() : player.position.clone();
+  particles.confetti(pos);
+  particles.sparkles(pos);
+  shake = Math.max(shake, 0.6);
+  haptics.huge();
+  audio.win();
+  score += boss ? boss.userData.score : 100;
+  showFact('BOSS DEFEATED! ' + (boss && boss.userData.name) + ' has fallen!');
+  save.incStat('bossesDefeated');
+  save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
+  popAchievementToast();
+  setTimeout(() => {
+    if (boss) { scene.remove(boss); boss = null; }
+    bossBar.classList.add('hidden');
+  }, 1400);
 }
 
 // ---------------- Stats / Achievements / Objectives ----------------
@@ -1141,10 +1332,37 @@ function applySavedOptions() {
   if (optSpeedCb)      optSpeedCb.checked      = !!s.options.speedDemon;
   if (optMegaFoodCb)   optMegaFoodCb.checked   = !!s.options.megaFood;
   if (optMegaCb)       optMegaCb.checked       = !!s.options.mega;
+  if (optDayNightCb)   optDayNightCb.checked   = !!s.options.dayNight;
   if (s.lastLevel && LEVELS[s.lastLevel]) selectedLevelKey = s.lastLevel;
-  // Re-render the level picker so the saved selection is highlighted
   buildLevelPicker();
+  refreshUnlockStates();
 }
+
+// Lock toggles that are gated behind completing specific levels.
+function refreshUnlockStates() {
+  for (const label of document.querySelectorAll('#settings .toggle')) {
+    const mode = label.dataset.mode;
+    if (!mode) continue;
+    const cb = label.querySelector('input[type=checkbox]');
+    const locked = !save.isModeUnlocked(mode);
+    label.classList.toggle('locked', locked);
+    if (locked) {
+      cb.checked = false;
+      cb.disabled = true;
+      let hint = label.querySelector('.lock-hint');
+      if (!hint) {
+        hint = document.createElement('span');
+        hint.className = 'lock-hint';
+        label.appendChild(hint);
+      }
+      const u = save.MODE_UNLOCKS[mode];
+      hint.textContent = u ? `Beat ${u.label} to unlock` : '';
+    } else {
+      cb.disabled = false;
+    }
+  }
+}
+
 applySavedOptions();
 refreshStatsPanel();
 
@@ -1250,6 +1468,19 @@ function consumeInCone(origin, fwd, range, coneCos) {
     if (leveled > 0) {
       audio.crumble();
       shake = Math.max(shake, 0.5);
+    }
+  }
+  // Plasma Breath deals heavy damage to a boss caught in the cone
+  if (boss && !boss.userData.dying) {
+    const to = _tmpA.copy(boss.position).sub(origin);
+    const d = to.length();
+    if (d <= range && d > 0.001) {
+      to.multiplyScalar(1 / d);
+      if (to.dot(fwd) >= coneCos) {
+        const reward = damageBoss(boss, 8);
+        if (reward > 0) { score += reward; onBossDefeated(); }
+        else { score += 16; particles.meat(boss.position); shake = Math.max(shake, 0.3); }
+      }
     }
   }
 }
@@ -1413,6 +1644,16 @@ function consumeAround(origin, range) {
       leveled++;
     });
     if (leveled > 0) { audio.crumble(); shake = Math.max(shake, 0.4); }
+  }
+  // Bosses take AOE damage (4 hp) — they're the only enemy this large
+  if (boss && !boss.userData.dying) {
+    const dx = boss.position.x - origin.x;
+    const dz = boss.position.z - origin.z;
+    if (dx * dx + dz * dz <= range * range) {
+      const reward = damageBoss(boss, 4);
+      if (reward > 0) { score += reward; onBossDefeated(); }
+      else { score += 8; particles.meat(boss.position); }
+    }
   }
 }
 
