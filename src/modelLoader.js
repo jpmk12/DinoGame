@@ -281,21 +281,41 @@ export function createDinoMeshSync(speciesKey) {
  * for procedural meshes or if SkeletonUtils isn't available. Picks the
  * best-matching clip names for idle/walk/run/attack heuristically.
  */
+// Find the first action whose clip name CONTAINS any of the needles.
+// We use contains-match (not exact) so Quaternius-style names like
+// "Triceratops_Idle" or "Anim_Idle_1" still match an "idle" search.
+function findClip(actions, ...needles) {
+  for (const needle of needles) {
+    for (const key of Object.keys(actions)) {
+      if (key.includes(needle)) return actions[key];
+    }
+  }
+  return null;
+}
+
+let _animsLogged = new Set();
 export function attachMixer(instance, THREE) {
   if (!instance.userData.fromGLB) return null;
   const clips = instance.userData.animations;
   if (!clips || clips.length === 0) return null;
-  // NOTE: the instance was already SkeletonUtils-cloned in
-  // createDinoMeshSync, so each instance has its own skeleton/bones and we
-  // don't need to re-parent anything here. Just hook up the mixer.
 
   const mixer = new THREE.AnimationMixer(instance);
   const actions = {};
   for (const clip of clips) {
     actions[clip.name.toLowerCase()] = mixer.clipAction(clip);
   }
-  const pick = (...names) => names.map((n) => actions[n.toLowerCase()]).find(Boolean);
-  const idle = pick('idle', 'idle_a', 'idle_1', 'stand', clips[0].name);
+  // One-shot log per species so the user can see exactly which clip names
+  // their pack ships with. Useful for tuning the idle/walk/run matchers.
+  const speciesTag = instance.userData.species || 'model';
+  if (!_animsLogged.has(speciesTag)) {
+    _animsLogged.add(speciesTag);
+    console.log('[DinoGrow] Animations for', speciesTag, ':', Object.keys(actions));
+  }
+  // Prefer a real "Idle" clip; fall back to the first clip only as a last
+  // resort. Falling back to clips[0] when it's actually a death/attack
+  // pose was what made the dino look like it had collapsed at spawn.
+  const idle = findClip(actions, 'idle', 'stand', 'rest')
+    || mixer.clipAction(clips[0]);
   if (idle) idle.play();
 
   instance.userData.mixer = mixer;
@@ -313,11 +333,10 @@ export function attachMixer(instance, THREE) {
 export function setMotion(instance, speedNorm, fade = 0.2) {
   if (!instance || !instance.userData.actions) return;
   const acts = instance.userData.actions;
-  const pick = (...names) => names.map((n) => acts[n.toLowerCase()]).find(Boolean);
   let target;
-  if (speedNorm > 0.7)      target = pick('run', 'gallop', 'walk', 'walking', 'idle', 'idle_a');
-  else if (speedNorm > 0.1) target = pick('walk', 'walking', 'run', 'idle', 'idle_a');
-  else                      target = pick('idle', 'idle_a', 'idle_b', 'stand');
+  if (speedNorm > 0.7)      target = findClip(acts, 'run', 'gallop', 'walking', 'walk', 'idle');
+  else if (speedNorm > 0.1) target = findClip(acts, 'walk', 'walking', 'run', 'idle');
+  else                      target = findClip(acts, 'idle', 'stand', 'rest');
   if (!target) return;
   if (instance.userData.currentAction === target) return;
   if (instance.userData.currentAction) instance.userData.currentAction.fadeOut(fade);
