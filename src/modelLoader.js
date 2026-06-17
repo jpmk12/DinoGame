@@ -243,8 +243,12 @@ export function createDinoMeshSync(speciesKey) {
     const bare = (SK_MODULE && SK_MODULE.clone)
       ? SK_MODULE.clone(cached)
       : cached.clone(true);
-    // Now wrap the bare clone so the caller can set inst.position freely
-    // without destroying our centering/feet offset.
+    // Quaternius (and most Blender-sourced) dinos face +Z. The procedural
+    // meshes and the camera/movement code assume -Z is "forward", so flip
+    // the bare 180 degrees around Y before wrapping. Centering still
+    // holds because the bounds are symmetric around origin after
+    // normalize.
+    bare.rotation.y = Math.PI;
     const inst = new THREE.Group();
     inst.add(bare);
     inst.traverse((o) => {

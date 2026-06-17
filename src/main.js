@@ -953,12 +953,18 @@ function showStageUp(stage) {
 function animateDino(d, dt, moving) {
   const groundY = getHeightAt(d.position.x, d.position.z);
   const parts = d.userData.parts;
-  // GLB models don't have procedural parts — do a whole-body bob instead.
+  // GLB/FBX models don't have procedural parts. If the model also has a
+  // real skeletal AnimationMixer (its walk clip is already cycling), we
+  // leave the vertical position flat so the bob doesn't add a hop on top
+  // of the real walk. Otherwise (no mixer = static model), do the body bob
+  // so it doesn't look frozen.
   if (!parts || Object.keys(parts).length === 0) {
     d.userData.walkPhase = (d.userData.walkPhase || 0) + dt * (moving ? 8 : 2);
     if (d.userData.flying) {
       const base = d.userData.flyHeight || 1.5;
       d.position.y = groundY + base + Math.sin(d.userData.walkPhase * 1.2) * 0.25;
+    } else if (d.userData.mixer) {
+      d.position.y = groundY;
     } else {
       const bob = moving
         ? Math.abs(Math.sin(d.userData.walkPhase * 1.5)) * 0.08
