@@ -157,9 +157,9 @@ export const MODE_UNLOCKS = {
 };
 
 export function isModeUnlocked(modeKey) {
-  const u = MODE_UNLOCKS[modeKey];
-  if (!u) return true;
-  return !!loadSave().completed[u.level];
+  // Modes are always available — kids should be able to enable any cheat
+  // whenever they want, no completion gating.
+  return true;
 }
 
 export const ACHIEVEMENTS = {

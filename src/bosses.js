@@ -13,8 +13,8 @@ export const BOSS_DATA = {
   tundra:      { name: 'Ice Titan',      species: 'stego',   scale: 2.3, health: 22, color: 0x88aacc, crown: 0xcfeaff },
   dinoPark:    { name: 'Park Captain',   species: 'raptor',  scale: 2.0, health: 18, color: 0x4a8a4a, crown: 0xc04040 },
   night:       { name: 'Shadow Maw',     species: 'raptor',  scale: 2.2, health: 20, color: 0x222a4a, crown: 0x88aaff },
-  cityRampage: { name: 'The Brute',      species: 'titan',   scale: 2.0, health: 30, color: 0x4a2a3a, crown: 0xff5a3a },
-  nightCity:   { name: 'Neon Wraith',    species: 'titan',   scale: 2.0, health: 30, color: 0x2a3a55, crown: 0x66e6ff },
+  cityRampage: { name: 'The Brute',      species: 'titan',   scale: 1.5, health: 18, color: 0x4a2a3a, crown: 0xff5a3a, speed: 3.0 },
+  nightCity:   { name: 'Neon Wraith',    species: 'titan',   scale: 1.5, health: 18, color: 0x2a3a55, crown: 0x66e6ff, speed: 3.0 },
 };
 
 export function buildBoss(levelKey) {
@@ -57,7 +57,10 @@ export function buildBoss(levelKey) {
   mesh.userData.name = data.name;
   mesh.userData.health = data.health;
   mesh.userData.maxHealth = data.health;
-  mesh.userData.speed = 4 + data.scale * 0.8;
+  // Speed: city bosses chase noticeably slower so the cramped streets stay
+  // playable; outdoor bosses still hustle. Per-boss override via data.speed.
+  const baseSpeed = data.speed != null ? data.speed : (3 + data.scale * 0.7);
+  mesh.userData.speed = baseSpeed;
   mesh.userData.scaleVal = data.scale;
   mesh.userData.size = data.scale * 1.5;
   mesh.userData.score = 200 + data.health * 8;
@@ -73,10 +76,13 @@ export function buildBoss(levelKey) {
 export function spawnBoss(scene, playerPos, levelKey) {
   const boss = buildBoss(levelKey);
   if (!boss) return null;
-  // Place ~70 units away in a random direction
+  // Place ~70+ units away in a random direction so you have time to grow
+  // before it reaches you. City bosses spawn even farther because the
+  // grid makes line-of-sight chases faster.
+  const isCity = !!BOSS_DATA[levelKey] && BOSS_DATA[levelKey].species === 'titan';
   for (let tries = 0; tries < 10; tries++) {
     const ang = Math.random() * Math.PI * 2;
-    const dist = 55 + Math.random() * 30;
+    const dist = (isCity ? 78 : 55) + Math.random() * 20;
     const x = Math.max(-PLAYABLE_RADIUS + 5, Math.min(PLAYABLE_RADIUS - 5,
       playerPos.x + Math.cos(ang) * dist));
     const z = Math.max(-PLAYABLE_RADIUS + 5, Math.min(PLAYABLE_RADIUS - 5,
