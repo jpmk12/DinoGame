@@ -118,19 +118,16 @@ async function tryLoadModel(speciesKey) {
       loader.load(
         url,
         (loaded) => {
-          // GLTFLoader returns { scene, animations }; FBXLoader returns a Group
-          // directly with .animations on it.
           const root = isFbx ? loaded : loaded.scene;
           const animations = isFbx ? (loaded.animations || []) : (loaded.animations || []);
           normalizeModel(root, spec);
-          // Wrap in an outer Group so callers can freely set position
-          // without destroying the centering offsets stored on the inner
-          // root. (createDinoMeshSync clones THIS wrapper.)
-          const wrapper = new THREE.Group();
-          wrapper.add(root);
-          wrapper.userData.animations = animations;
-          modelCache.set(speciesKey, wrapper);
-          resolve(wrapper);
+          // Cache the BARE normalized root. We wrap in createDinoMeshSync
+          // after SkeletonUtils.clone so SK works on the same hierarchy
+          // it received from the loader (some skeleton structures get
+          // confused if there's an extra Group wrapping them at clone time).
+          root.userData.animations = animations;
+          modelCache.set(speciesKey, root);
+          resolve(root);
         },
         undefined,
         () => {
@@ -207,27 +204,62 @@ export async function createDinoMesh(speciesKey) {
  * Synchronous procedural-only build (used during initial scene setup before
  * preload finishes, and for instances where async is awkward).
  */
+// One-shot debug print so we can see what's actually happening when a
+// player FBX clone is built. Logs once per session.
+let _debugPrintedOnce = false;
+function debugDumpFirstClone(inst, speciesKey) {
+  if (_debugPrintedOnce) return;
+  _debugPrintedOnce = true;
+  let meshCount = 0, skinnedCount = 0, boneCount = 0;
+  let firstSkinned = null;
+  inst.traverse((o) => {
+    if (o.isMesh) meshCount++;
+    if (o.isSkinnedMesh) { skinnedCount++; if (!firstSkinned) firstSkinned = o; }
+    if (o.isBone) boneCount++;
+  });
+  const box = new THREE.Box3().setFromObject(inst);
+  console.log('[DinoGrow] First model clone:', speciesKey, {
+    meshCount, skinnedCount, boneCount,
+    boundsMin: box.min.toArray().map((n) => +n.toFixed(2)),
+    boundsMax: box.max.toArray().map((n) => +n.toFixed(2)),
+    instScale: inst.scale.toArray().map((n) => +n.toFixed(2)),
+    firstSkinnedVisible: firstSkinned && firstSkinned.visible,
+    firstSkinnedFrustumCulled: firstSkinned && firstSkinned.frustumCulled,
+  });
+}
+
 export function createDinoMeshSync(speciesKey) {
   const spec = SPECIES[speciesKey];
   if (!spec) throw new Error(`Unknown species: ${speciesKey}`);
 
   if (modelCache.has(speciesKey)) {
     const cached = modelCache.get(speciesKey);
-    // Use SkeletonUtils.clone when available — the standard Object3D.clone
-    // makes new SkinnedMesh nodes that still reference the ORIGINAL
-    // skeleton's bones, so animation moves the cached entity instead of
-    // the clone, and the clone renders at the cached position (not the
-    // player's). SK.clone fixes the bone references properly.
-    const inst = (SK_MODULE && SK_MODULE.clone)
+    // SK.clone on the bare cached root (no extra wrapper around it) so
+    // SkeletonUtils sees exactly the hierarchy from the loader.
+    const bare = (SK_MODULE && SK_MODULE.clone)
       ? SK_MODULE.clone(cached)
       : cached.clone(true);
-    // Belt-and-suspenders: ensure SkinnedMesh frustumCulled is off on
-    // the clone too, since clone() doesn't always propagate that.
-    inst.traverse((o) => { if (o.isSkinnedMesh) o.frustumCulled = false; });
+    // Now wrap the bare clone so the caller can set inst.position freely
+    // without destroying our centering/feet offset.
+    const inst = new THREE.Group();
+    inst.add(bare);
+    inst.traverse((o) => {
+      if (o.isSkinnedMesh) o.frustumCulled = false;
+      if (o.isMesh && o.material) {
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of ms) {
+          // Force visibility — some FBX exports come in with stray
+          // transparency / low opacity that hides the mesh.
+          if (m.transparent && m.opacity < 0.5) m.opacity = 1;
+          m.visible = true;
+        }
+      }
+    });
     inst.userData.fromGLB = true;
     inst.userData.parts = {};
     inst.userData.animations = cached.userData.animations || [];
     inst.userData.pendingMixer = inst.userData.animations.length > 0;
+    debugDumpFirstClone(inst, speciesKey);
     return inst;
   }
 
