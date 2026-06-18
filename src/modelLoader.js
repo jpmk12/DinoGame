@@ -62,6 +62,10 @@ function expectedFile(speciesKey, ext = modelExt) {
  * entirely so there's no console noise.
  */
 export async function preloadAllModels() {
+  // If the trex species has no modelFile, the whole loader is opted out
+  // (every species is procedural). Bail before any HEAD probes.
+  if (!SPECIES.trex || !SPECIES.trex.modelFile) return [];
+
   // Probe both formats for the trex (the only species that must exist for
   // detection). Whichever responds with 200 wins.
   const trexBase = SPECIES.trex.modelFile.replace(/\.(glb|fbx)$/i, '');
