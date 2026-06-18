@@ -343,6 +343,15 @@ export function createDinoMeshSync(speciesKey) {
           // transparency / low opacity that hides the mesh.
           if (m.transparent && m.opacity < 0.5) m.opacity = 1;
           m.visible = true;
+          // Render BOTH sides. Blender exports Z-up to GLTF Y-up by
+          // baking a rotation that can leave the scale chain with a
+          // negative determinant, which flips face winding and means
+          // backface culling hides every triangle. The only proof the
+          // mesh is even there at that point is the shadow-caster pass,
+          // which uses geometry not winding. Forcing DoubleSide makes
+          // both face directions render so the dino appears regardless
+          // of winding.
+          m.side = THREE.DoubleSide;
         }
       }
     });
