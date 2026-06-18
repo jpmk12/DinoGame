@@ -334,25 +334,24 @@ export function createDinoMeshSync(speciesKey) {
     const inst = new THREE.Group();
     inst.add(bare);
     inst.userData.faceFlip = Math.PI;
+    // Replace every cloned material with a fresh, simple MeshLambertMaterial
+    // colored to the species. We've spent a lot of effort trying to force
+    // the source materials to render (visibility, opacity, transparent,
+    // doubleside) and the mesh STILL only shows up as a shadow — there's
+    // something Quaternius-specific (alpha test set to 1, broken texture
+    // reference, or a fragment property Three.js doesn't honor) we can't
+    // detect. Trade the textured look for a solid color and the dino
+    // appears. Procedural-ish vibe, guaranteed visible.
     inst.traverse((o) => {
       if (o.isSkinnedMesh) o.frustumCulled = false;
-      if (o.isMesh && o.material) {
-        const ms = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of ms) {
-          // Force visibility — some FBX exports come in with stray
-          // transparency / low opacity that hides the mesh.
-          if (m.transparent && m.opacity < 0.5) m.opacity = 1;
-          m.visible = true;
-          // Render BOTH sides. Blender exports Z-up to GLTF Y-up by
-          // baking a rotation that can leave the scale chain with a
-          // negative determinant, which flips face winding and means
-          // backface culling hides every triangle. The only proof the
-          // mesh is even there at that point is the shadow-caster pass,
-          // which uses geometry not winding. Forcing DoubleSide makes
-          // both face directions render so the dino appears regardless
-          // of winding.
-          m.side = THREE.DoubleSide;
-        }
+      if (o.isMesh) {
+        const newMat = new THREE.MeshLambertMaterial({
+          color: spec.color,
+          side: THREE.DoubleSide,
+        });
+        o.material = newMat;
+        o.castShadow = true;
+        o.receiveShadow = true;
       }
     });
     inst.userData.fromGLB = true;
