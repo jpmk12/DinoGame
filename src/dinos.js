@@ -1129,7 +1129,14 @@ export const SPECIES = {
     desc: 'Long-necked giant',
     color: 0x7a6a8a,
     build: buildBrachio,
-    modelFile: 'Brachiosaurus.glb',
+    // Opt out of the GLB pipeline for this one species — the Quaternius
+    // Apatosaurus tail rig in the pack doesn't survive SkeletonUtils.clone
+    // (the tail segments come out disconnected). The procedural Brachio
+    // has working hand-coded leg + tail animation and the right
+    // long-necked silhouette, so we use it instead. Flipping back to a
+    // .glb filename here re-engages the GLB path the moment a working
+    // pack appears.
+    modelFile: null,
     speedMult: 0.7,
     scaleMult: 1.3,
     diet: 'herbivore',
