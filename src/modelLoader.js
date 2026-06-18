@@ -38,10 +38,9 @@ const pendingLoads = new Map();
 
 const MODELS_BASE = './models/';
 // Normalize every loaded model so its longest axis is this many world
-// units. Slightly larger than the procedural baseline so the visible
-// silhouette after player stage scale (0.35 hatchling) is clearly on
-// screen instead of a beetle-sized speck.
-const TARGET_LENGTH = 6.0;
+// units. Tuned to match the procedural dino footprint at the same stage
+// scale (hatchling 0.35 -> ~1.6 unit visible, giant 1.9 -> ~8.5 unit).
+const TARGET_LENGTH = 4.5;
 
 // Which extension to use for this run. Detected at preload by HEAD-probing
 // the trex file in both formats. 'glb' wins ties since it's lighter.
@@ -230,18 +229,28 @@ function normalizeModel(root, spec) {
   const s2 = TARGET_LENGTH / longest;
   if (Math.abs(s2 - 1) > 0.02) root.scale.multiplyScalar(s2);
 
-  // Center on x/z and drop feet to y=0, based on the FINAL bounds.
+  // Center on x/z and drop feet to y=0. Use only the visible mesh
+  // geometry for this measurement — Box3.setFromObject also expands by
+  // bone positions, and Quaternius rigs often have skeleton-root bones
+  // sitting slightly below the actual foot vertices. Letting those bones
+  // dictate the "ground" would lift the dino off the terrain (Brachio
+  // especially noticeably).
   root.updateMatrixWorld(true);
-  box = new THREE.Box3().setFromObject(root);
+  const meshBox = new THREE.Box3();
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    meshBox.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
+  });
   const center = new THREE.Vector3();
-  box.getCenter(center);
+  meshBox.getCenter(center);
   root.position.x -= center.x;
   root.position.z -= center.z;
-  root.position.y -= box.min.y;
+  root.position.y -= meshBox.min.y;
   console.log(
     '[DinoGrow] normalize', spec.name + ':',
     'finalLongest=' + longest.toFixed(3),
-    'feetAt=' + box.min.y.toFixed(3),
+    'feetAt=' + meshBox.min.y.toFixed(3),
   );
 
   // CRITICAL for FBX skinning: the boneInverses captured by the original
