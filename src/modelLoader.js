@@ -205,7 +205,21 @@ function normalizeModel(root, spec) {
   const size = new THREE.Vector3();
   box.getSize(size);
   const longest = Math.max(size.x, size.z) || size.y || 1;
-  const s = TARGET_LENGTH / longest;
+  // Clamp the auto-scale factor — Blender-baked GLBs vs Quaternius FBXs
+  // arrive in very different unit scales, and a mis-measured bounding box
+  // for a SkinnedMesh can produce a factor of 100+ (which puts the dino
+  // inside the camera, leaving only a giant shadow visible). If the
+  // model is already roughly within target length, leave it alone.
+  let s = TARGET_LENGTH / longest;
+  const rawS = s;
+  s = Math.max(0.05, Math.min(s, 20));
+  if (longest >= 0.5 && longest <= TARGET_LENGTH * 2) s = 1; // already a reasonable size
+  console.log(
+    '[DinoGrow] normalize:',
+    'longest=' + longest.toFixed(3),
+    'rawScale=' + rawS.toFixed(3),
+    'appliedScale=' + s.toFixed(3),
+  );
   root.scale.multiplyScalar(s);
 
   // Re-measure after scaling
