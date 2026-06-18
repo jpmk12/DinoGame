@@ -200,25 +200,24 @@ function normalizeModel(root, spec) {
     }
   });
 
-  // Measure bounding box, scale to target length, drop feet to y=0
+  // Force every loaded model to a known world size (TARGET_LENGTH along
+  // the longest horizontal axis). The stage-scale system downstream
+  // (0.35 hatchling -> 1.9 giant) assumes this base. Leaving a model at
+  // its natural size means a 6-unit GLB renders 6x bigger than the
+  // procedural dinos at the same stage - which is what was hiding the
+  // T-Rex inside the camera.
   const box = new THREE.Box3().setFromObject(root);
   const size = new THREE.Vector3();
   box.getSize(size);
   const longest = Math.max(size.x, size.z) || size.y || 1;
-  // Clamp the auto-scale factor — Blender-baked GLBs vs Quaternius FBXs
-  // arrive in very different unit scales, and a mis-measured bounding box
-  // for a SkinnedMesh can produce a factor of 100+ (which puts the dino
-  // inside the camera, leaving only a giant shadow visible). If the
-  // model is already roughly within target length, leave it alone.
   let s = TARGET_LENGTH / longest;
-  const rawS = s;
-  s = Math.max(0.05, Math.min(s, 20));
-  if (longest >= 0.5 && longest <= TARGET_LENGTH * 2) s = 1; // already a reasonable size
+  // Safety clamp against runaway scales from mis-measured bounding boxes.
+  s = Math.max(0.001, Math.min(s, 100));
   console.log(
-    '[DinoGrow] normalize:',
+    '[DinoGrow] normalize',
+    spec.name + ':',
     'longest=' + longest.toFixed(3),
-    'rawScale=' + rawS.toFixed(3),
-    'appliedScale=' + s.toFixed(3),
+    'scale=' + s.toFixed(3),
   );
   root.scale.multiplyScalar(s);
 
