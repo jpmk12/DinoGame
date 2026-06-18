@@ -1548,7 +1548,7 @@ function firePlasmaBreath() {
   plateFlash = 0.6;
   setTimeout(() => {
     if (!gameRunning || !player || player.userData.species !== 'titan') return;
-    const yaw = player.rotation.y;
+    const yaw = player.rotation.y - (player.userData.faceFlip || 0);
     const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
     const scale = player.scale.x;
     const mouth = player.position.clone();
@@ -1598,8 +1598,11 @@ function fireSweep() {
 
 function firePounce() {
   audio.abilityPounce();
-  // Leap forward in current facing direction
-  const yaw = player.rotation.y;
+  // Leap forward in current facing direction. Subtract faceFlip so
+  // FBX-rigged Velociraptor pounces in the visual-forward direction
+  // rather than the wrapper-rotation-forward direction (which is +PI
+  // off because of the +Z-vs--Z convention flip).
+  const yaw = player.rotation.y - (player.userData.faceFlip || 0);
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
   pounceStart.copy(player.position);
   pounceEnd.copy(player.position).add(fwd.multiplyScalar(12));
@@ -1786,7 +1789,11 @@ function updatePlayer(dt) {
   let moving = false;
   if (chargeTimer > 0) {
     chargeTimer = Math.max(0, chargeTimer - dt);
-    const yaw = player.rotation.y;
+    // For FBX wrappers the rotation includes the +PI face flip, which
+    // makes the standard (-sin, -cos) yaw-to-forward formula point
+    // BACKWARD. Subtract the flip so charge always pushes the dino in
+    // the direction it's actually facing.
+    const yaw = player.rotation.y - (player.userData.faceFlip || 0);
     const dx = -Math.sin(yaw);
     const dz = -Math.cos(yaw);
     const chargeSpeed = baseSpeed * 3.0;
