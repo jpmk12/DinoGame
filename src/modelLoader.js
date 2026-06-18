@@ -128,15 +128,10 @@ async function tryLoadModel(speciesKey) {
           const root = isFbx ? loaded : loaded.scene;
           const animations = isFbx ? (loaded.animations || []) : (loaded.animations || []);
           normalizeModel(root, spec);
-          // Strip any per-bone .scale tracks. Quaternius walk/run anims
-          // sometimes include cartoon squash-and-stretch on the leg bones
-          // (the lower leg literally scales up during stride extension),
-          // which Three.js plays back faithfully and reads as "stretching".
-          // Removing the scale tracks keeps the natural position + rotation
-          // motion intact. If a clip didn't have any scale tracks the call
-          // is a no-op.
-          const cleanedAnimations = stripScaleTracks(animations);
-          root.userData.animations = cleanedAnimations;
+          // Cache the BARE normalized root. We wrap in createDinoMeshSync
+          // after SkeletonUtils.clone so SK works on the same hierarchy
+          // it received from the loader.
+          root.userData.animations = animations;
           modelCache.set(speciesKey, root);
           resolve(root);
         },
