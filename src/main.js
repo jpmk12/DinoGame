@@ -255,6 +255,11 @@ let vehicles = null;     // Group of vehicles (jeeps or cars, level-dependent)
 let buildings = null;    // Group of destructible city buildings (City Rampage)
 let boss = null;         // current level boss (mesh) or null when defeated
 let bossDefeated = false;
+// Grace period so kids can grow before the boss shows up. Set in startGame
+// + respawn. The boss spawns when this hits 0 (or never, if already
+// defeated for this run).
+const BOSS_SPAWN_DELAY = 45;
+let bossSpawnTimer = 0;
 let babies = [];         // active baby dinos (THREE.Group instances)
 
 // Title-screen game options — read at startGame.
@@ -456,7 +461,9 @@ function startGame(species) {
   buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
-  if (BOSS_DATA[selectedLevelKey]) boss = spawnBoss(scene, player.position, selectedLevelKey);
+  // Boss spawns AFTER a grace period so the dino has time to grow first.
+  // updateBossTick ticks the timer down each frame.
+  bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
   score = 0;
   hasWon = gameSettings.startGiant; // skip win celebration if you started there
   power.active = null;
@@ -644,7 +651,9 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   vehicles = spawnLevelVehicles();
   buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
-  if (BOSS_DATA[selectedLevelKey]) boss = spawnBoss(scene, player.position, selectedLevelKey);
+  // Same grace period after game-over respawn so the boss doesn't pile on
+  // a fresh, smaller dino immediately.
+  bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
   homeRegenAccum = 0;
   power.active = null;
   power.timeLeft = 0;
@@ -1155,6 +1164,13 @@ function updateHome(dt) {
 
 // ---------------- Boss handling ----------------
 function updateBossTick(dt) {
+  // Grace period: count down to spawn, then summon the boss once.
+  if (!boss && !bossDefeated && bossSpawnTimer > 0) {
+    bossSpawnTimer -= dt;
+    if (bossSpawnTimer <= 0 && BOSS_DATA[selectedLevelKey]) {
+      boss = spawnBoss(scene, player.position, selectedLevelKey);
+    }
+  }
   if (!boss) { bossBar.classList.add('hidden'); return; }
   const r = updateBoss(boss, dt, player.position);
   if (r.dead) {
