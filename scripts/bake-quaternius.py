@@ -39,6 +39,11 @@ import os
 import glob
 
 # ===== EDIT THESE PATHS =====
+# On Windows, either use forward slashes:   "C:/Users/you/dinos"
+# or prefix with r for "raw string":        r"C:\Users\you\dinos"
+# or double each backslash:                 "C:\\Users\\you\\dinos"
+# (Plain "C:\Users\..." triggers a unicode-escape syntax error because
+# Python reads "\U" as the start of a unicode codepoint.)
 INPUT_DIR  = "/path/to/your/unzipped/quaternius/fbx/folder"
 OUTPUT_DIR = "/path/to/where/you/want/the/glb/files"
 # ============================
