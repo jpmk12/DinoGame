@@ -37,11 +37,11 @@ const modelMissing = new Set();
 const pendingLoads = new Map();
 
 const MODELS_BASE = './models/';
-// Normalize every loaded model so its longest horizontal axis is this many
-// world units. Chosen to roughly match the procedural T-Rex's footprint
-// so FBX/GLB dinos render at the same size as the procedural ones once
-// the player's stage scale (0.35 -> 1.9) is applied.
-const TARGET_LENGTH = 4.0;
+// Normalize every loaded model so its longest axis is this many world
+// units. Slightly larger than the procedural baseline so the visible
+// silhouette after player stage scale (0.35 hatchling) is clearly on
+// screen instead of a beetle-sized speck.
+const TARGET_LENGTH = 6.0;
 
 // Which extension to use for this run. Detected at preload by HEAD-probing
 // the trex file in both formats. 'glb' wins ties since it's lighter.
@@ -200,59 +200,49 @@ function normalizeModel(root, spec) {
     }
   });
 
-  // Measure size from the actual visible geometry — for SkinnedMesh,
-  // Box3.setFromObject on the parent can include bones at huge offsets
-  // and miss the mesh's real visual extent. Use the first SkinnedMesh's
-  // own geometry bounds (transformed into world space) which is what
-  // the eye actually sees.
+  // Two-pass normalize.
+  //
+  // Pass 1: a rough first-cut scale using whatever the first measurement
+  // returns. SkinnedMesh + nested groups can make this measurement
+  // unreliable (an oversized "bone bounds" mesh can dominate, producing
+  // an overcorrection that leaves the dino tiny). So we always re-measure
+  // and correct in pass 2.
+  //
+  // Pass 2: re-measure the WHOLE rendered hierarchy via Box3.setFromObject
+  // (which is the ground truth) and snap the scale so the longest axis
+  // is exactly TARGET_LENGTH. This guarantees every species ends up the
+  // same size, regardless of source rig.
   root.updateMatrixWorld(true);
-  let measureBox = null;
-  root.traverse((o) => {
-    if (measureBox || !o.isMesh) return;
-    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-    measureBox = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
-  });
-  if (!measureBox) measureBox = new THREE.Box3().setFromObject(root);
+  let box = new THREE.Box3().setFromObject(root);
   const size = new THREE.Vector3();
-  measureBox.getSize(size);
-  const longest = Math.max(size.x, size.z, size.y) || 1;
-  let s = TARGET_LENGTH / longest;
-  s = Math.max(0.0001, Math.min(s, 1000));
-  root.scale.multiplyScalar(s);
+  box.getSize(size);
+  let longest = Math.max(size.x, size.z, size.y) || 1;
+  let s1 = TARGET_LENGTH / longest;
+  s1 = Math.max(0.0001, Math.min(s1, 1000));
+  root.scale.multiplyScalar(s1);
 
-  // GUARANTEED cap: re-measure after our scale, and if the model is still
-  // bigger than TARGET_LENGTH on any horizontal axis (which happens when
-  // the SkinnedMesh's bone bind matrices carry an extra scale that the
-  // geometry.boundingBox didn't reflect), apply a second corrective
-  // scale. This is the safety net for the "I'm inside the dinosaur"
-  // case where the visible silhouette dwarfs the world.
+  // CORRECTIVE second pass: re-measure the full world bounds and snap
+  // to TARGET_LENGTH whether the first pass undershot or overshot.
   root.updateMatrixWorld(true);
-  const final = new THREE.Box3().setFromObject(root);
-  const finalSize = new THREE.Vector3();
-  final.getSize(finalSize);
-  const finalLongest = Math.max(finalSize.x, finalSize.z, finalSize.y) || 1;
-  let s2 = 1;
-  if (finalLongest > TARGET_LENGTH * 1.5) {
-    s2 = TARGET_LENGTH / finalLongest;
-    root.scale.multiplyScalar(s2);
-  }
-  console.log(
-    '[DinoGrow] normalize',
-    spec.name + ':',
-    'measured=' + longest.toFixed(3),
-    'firstScale=' + s.toFixed(4),
-    'finalLongest=' + finalLongest.toFixed(3),
-    'safetyScale=' + s2.toFixed(4),
-  );
+  box = new THREE.Box3().setFromObject(root);
+  box.getSize(size);
+  longest = Math.max(size.x, size.z, size.y) || 1;
+  const s2 = TARGET_LENGTH / longest;
+  if (Math.abs(s2 - 1) > 0.02) root.scale.multiplyScalar(s2);
 
-  // Re-measure after scaling
-  const box2 = new THREE.Box3().setFromObject(root);
+  // Center on x/z and drop feet to y=0, based on the FINAL bounds.
+  root.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(root);
   const center = new THREE.Vector3();
-  box2.getCenter(center);
-  // Move so feet sit on y=0 and center on x/z
+  box.getCenter(center);
   root.position.x -= center.x;
   root.position.z -= center.z;
-  root.position.y -= box2.min.y;
+  root.position.y -= box.min.y;
+  console.log(
+    '[DinoGrow] normalize', spec.name + ':',
+    'finalLongest=' + longest.toFixed(3),
+    'feetAt=' + box.min.y.toFixed(3),
+  );
 
   // CRITICAL for FBX skinning: the boneInverses captured by the original
   // bind() (at load time, pre-scale) no longer match the bones' current
