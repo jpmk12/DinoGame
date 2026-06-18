@@ -200,26 +200,50 @@ function normalizeModel(root, spec) {
     }
   });
 
-  // Force every loaded model to a known world size (TARGET_LENGTH along
-  // the longest horizontal axis). The stage-scale system downstream
-  // (0.35 hatchling -> 1.9 giant) assumes this base. Leaving a model at
-  // its natural size means a 6-unit GLB renders 6x bigger than the
-  // procedural dinos at the same stage - which is what was hiding the
-  // T-Rex inside the camera.
-  const box = new THREE.Box3().setFromObject(root);
+  // Measure size from the actual visible geometry — for SkinnedMesh,
+  // Box3.setFromObject on the parent can include bones at huge offsets
+  // and miss the mesh's real visual extent. Use the first SkinnedMesh's
+  // own geometry bounds (transformed into world space) which is what
+  // the eye actually sees.
+  root.updateMatrixWorld(true);
+  let measureBox = null;
+  root.traverse((o) => {
+    if (measureBox || !o.isMesh) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    measureBox = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+  });
+  if (!measureBox) measureBox = new THREE.Box3().setFromObject(root);
   const size = new THREE.Vector3();
-  box.getSize(size);
-  const longest = Math.max(size.x, size.z) || size.y || 1;
+  measureBox.getSize(size);
+  const longest = Math.max(size.x, size.z, size.y) || 1;
   let s = TARGET_LENGTH / longest;
-  // Safety clamp against runaway scales from mis-measured bounding boxes.
-  s = Math.max(0.001, Math.min(s, 100));
+  s = Math.max(0.0001, Math.min(s, 1000));
+  root.scale.multiplyScalar(s);
+
+  // GUARANTEED cap: re-measure after our scale, and if the model is still
+  // bigger than TARGET_LENGTH on any horizontal axis (which happens when
+  // the SkinnedMesh's bone bind matrices carry an extra scale that the
+  // geometry.boundingBox didn't reflect), apply a second corrective
+  // scale. This is the safety net for the "I'm inside the dinosaur"
+  // case where the visible silhouette dwarfs the world.
+  root.updateMatrixWorld(true);
+  const final = new THREE.Box3().setFromObject(root);
+  const finalSize = new THREE.Vector3();
+  final.getSize(finalSize);
+  const finalLongest = Math.max(finalSize.x, finalSize.z, finalSize.y) || 1;
+  let s2 = 1;
+  if (finalLongest > TARGET_LENGTH * 1.5) {
+    s2 = TARGET_LENGTH / finalLongest;
+    root.scale.multiplyScalar(s2);
+  }
   console.log(
     '[DinoGrow] normalize',
     spec.name + ':',
-    'longest=' + longest.toFixed(3),
-    'scale=' + s.toFixed(3),
+    'measured=' + longest.toFixed(3),
+    'firstScale=' + s.toFixed(4),
+    'finalLongest=' + finalLongest.toFixed(3),
+    'safetyScale=' + s2.toFixed(4),
   );
-  root.scale.multiplyScalar(s);
 
   // Re-measure after scaling
   const box2 = new THREE.Box3().setFromObject(root);
