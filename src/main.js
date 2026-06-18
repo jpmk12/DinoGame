@@ -1446,15 +1446,29 @@ function spawnBeam(origin, fwd, scale) {
 
 function consumeInCone(origin, fwd, range, coneCos) {
   const apex = true; // beam vaporizes anything regardless of size
+  // Flatten the cone test to the horizontal plane. The Titan's mouth sits
+  // high above the ground, so a strict 3D cone misses close enemies that
+  // are below the mouth — even though the beam visibly sweeps over them.
+  const fwdLen = Math.hypot(fwd.x, fwd.z) || 1;
+  const fwdHx = fwd.x / fwdLen;
+  const fwdHz = fwd.z / fwdLen;
+  // Anything within this radius gets vaporized regardless of cone angle,
+  // so a Titan with an enemy right at its feet can still chomp it with
+  // the beam button.
+  const SPLASH_RADIUS = 5;
   const eat = (group, handler) => {
     if (!group) return;
     for (let i = group.children.length - 1; i >= 0; i--) {
       const obj = group.children[i];
-      const to = _tmpA.copy(obj.position).sub(origin);
-      const dist = to.length();
-      if (dist > range || dist < 0.001) continue;
-      to.multiplyScalar(1 / dist);
-      if (to.dot(fwd) < coneCos) continue;
+      const dx = obj.position.x - origin.x;
+      const dz = obj.position.z - origin.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > range) continue;
+      // Close-range splash: always hit
+      if (dist < SPLASH_RADIUS) { handler(obj); continue; }
+      // Horizontal cone check
+      const dot = (dx / dist) * fwdHx + (dz / dist) * fwdHz;
+      if (dot < coneCos) continue;
       handler(obj);
     }
   };
@@ -1512,11 +1526,15 @@ function consumeInCone(origin, fwd, range, coneCos) {
   }
   // Plasma Breath deals heavy damage to a boss caught in the cone
   if (boss && !boss.userData.dying) {
-    const to = _tmpA.copy(boss.position).sub(origin);
-    const d = to.length();
-    if (d <= range && d > 0.001) {
-      to.multiplyScalar(1 / d);
-      if (to.dot(fwd) >= coneCos) {
+    // Same flat horizontal cone test + close-range splash so the beam
+    // can hit a boss right at the Titan's feet.
+    const dx = boss.position.x - origin.x;
+    const dz = boss.position.z - origin.z;
+    const d = Math.hypot(dx, dz);
+    if (d <= range) {
+      const inSplash = d < SPLASH_RADIUS;
+      const dot = d > 0.001 ? (dx / d) * fwdHx + (dz / d) * fwdHz : 1;
+      if (inSplash || dot >= coneCos) {
         const reward = damageBoss(boss, 8);
         if (reward > 0) { score += reward; onBossDefeated(); }
         else { score += 16; particles.meat(boss.position); shake = Math.max(shake, 0.3); }
