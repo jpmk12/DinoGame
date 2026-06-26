@@ -23,6 +23,9 @@ Eat plants, mushrooms, fruit, critters, eggs, watermelons — anything smaller t
 | Velociraptor | Fast, small | **Pounce** — 12u forward leap + landing eat |
 | Brachiosaurus | Slow, huge | **Stomp** — 16u radius enemy stun |
 | Spinosaurus | Slightly bigger | **Frenzy** — 5s 2× speed + apex eat |
+| Ankylosaurus | Slow, armored | **Smash** — tail-club ring stun + topples buildings |
+| Parasaurolophus | Fast, light | **Call** — 35u trumpet flee aura |
+| Pteranodon | Fastest, smallest | **Swoop** — 18u glide that eats along the path |
 | Titan | Largest | **Plasma Breath** — energy beam, 3s cooldown |
 
 ### Levels

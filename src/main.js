@@ -1631,6 +1631,65 @@ function fireFrenzy() {
   haptics.big();
 }
 
+// Ankylosaurus tail-club: radial knockback + stun. Tighter radius than
+// Stomp (12u vs 16u), but flings enemies outward and topples buildings.
+function fireSmash() {
+  audio.abilitySmash();
+  particles.dust(player.position);
+  shake = Math.max(shake, 0.5);
+  haptics.huge();
+  const here = player.position;
+  const r = 12 + player.scale.x * 1.5;
+  const r2 = r * r;
+  if (entities) {
+    for (const ent of entities.children) {
+      if (ent.userData.kind !== 'enemy' && ent.userData.kind !== 'critter') continue;
+      const dx = ent.position.x - here.x;
+      const dz = ent.position.z - here.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > r2) continue;
+      ent.userData.stunTimer = 2.5;
+    }
+  }
+  // Topple any buildings in range — same path Sweep uses
+  consumeAround(here, r * 0.75);
+}
+
+// Parasaurolophus trumpet: very long-range flee aura. Bigger than Roar.
+function fireCall() {
+  audio.abilityCall();
+  particles.sparkles(player.position.clone().add(new THREE.Vector3(0, 2.2, 0)));
+  shake = Math.max(shake, 0.2);
+  haptics.big();
+  if (!entities) return;
+  const range = 35;
+  for (const ent of entities.children) {
+    if (ent.userData.kind !== 'enemy' && ent.userData.kind !== 'critter') continue;
+    const d = ent.position.distanceTo(player.position);
+    if (d < range) ent.userData.fleeTimer = 4.0;
+  }
+}
+
+// Pteranodon swoop: forward glide-leap that auto-eats anything along
+// the flight path. Like Pounce, but flies further and clears a tube
+// rather than a single landing point.
+function fireSwoop() {
+  audio.abilitySwoop();
+  haptics.big();
+  const yaw = player.rotation.y - (player.userData.faceFlip || 0);
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  pounceStart.copy(player.position);
+  pounceEnd.copy(player.position).add(fwd.multiplyScalar(18));
+  pounceTimer = 0.55;
+  // Consume along the path as a series of small ranges so anything
+  // standing in the corridor gets eaten on the way through.
+  const steps = 6;
+  for (let i = 1; i <= steps; i++) {
+    const p = pounceStart.clone().lerp(pounceEnd, i / steps);
+    consumeAround(p, 3.0);
+  }
+}
+
 function fireAbility(kind) {
   if (!activeAbility) return;
   abilityCooldown = activeAbility.cooldown;
@@ -1645,6 +1704,9 @@ function fireAbility(kind) {
   else if (kind === 'pounce')   firePounce();
   else if (kind === 'stomp')    fireStomp();
   else if (kind === 'frenzy')   fireFrenzy();
+  else if (kind === 'smash')    fireSmash();
+  else if (kind === 'call')     fireCall();
+  else if (kind === 'swoop')    fireSwoop();
   save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
   popAchievementToast();
 }
@@ -1676,6 +1738,15 @@ function consumeAround(origin, range) {
       recordEvent('crittersEaten');
       spawnCritter(entities, player.position);
     }
+  });
+  // Plants — critical for herbivore Sweep/Smash to feel responsive
+  check(plants, (p) => {
+    particles.leaves(p.position);
+    plants.remove(p);
+    addGrowth(p.userData.nutrition || 1);
+    score += 1;
+    recordEvent('plantsEaten');
+    spawnPlantRandom(plants);
   });
   check(foods, (f) => {
     const pType = f.userData.particleType || 'leaves';

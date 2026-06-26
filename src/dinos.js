@@ -1164,7 +1164,8 @@ export const SPECIES = {
     speedMult: 0.75,
     scaleMult: 0.95,
     diet: 'herbivore',
-    playable: false,
+    playable: true,
+    ability: { kind: 'smash',  name: 'SMASH',  cooldown: 6 },
   },
   para: {
     name: 'Parasaurolophus',
@@ -1175,7 +1176,8 @@ export const SPECIES = {
     speedMult: 1.1,
     scaleMult: 0.95,
     diet: 'herbivore',
-    playable: false,
+    playable: true,
+    ability: { kind: 'call',   name: 'CALL',   cooldown: 8 },
   },
   ptero: {
     name: 'Pteranodon',
@@ -1186,7 +1188,8 @@ export const SPECIES = {
     speedMult: 1.3,
     scaleMult: 0.8,
     diet: 'carnivore',
-    playable: false,
+    playable: true,
+    ability: { kind: 'swoop',  name: 'SWOOP',  cooldown: 5 },
   },
 };
 

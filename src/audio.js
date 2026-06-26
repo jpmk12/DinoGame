@@ -233,6 +233,25 @@ class AudioManager {
     setTimeout(() => this._tone(660, 0.12, 'sawtooth', 0.2, 1.8), 80);
     setTimeout(() => this._tone(880, 0.18, 'sawtooth', 0.22, 1.5), 170);
   }
+
+  abilitySmash() {
+    // Heavy club thud followed by metallic ring
+    this._tone(55, 0.3, 'sawtooth', 0.4, 0.4);
+    this._noise(0.25, 0.4, 200);
+    setTimeout(() => this._tone(180, 0.2, 'triangle', 0.18, 0.7), 90);
+  }
+
+  abilityCall() {
+    // Long crested-trumpet bellow — two slow tones a fifth apart
+    this._tone(180, 0.6, 'sawtooth', 0.25, 0.55);
+    setTimeout(() => this._tone(270, 0.7, 'sawtooth', 0.22, 0.5), 180);
+  }
+
+  abilitySwoop() {
+    // Rising whoosh — wing-flap glide
+    this._noise(0.4, 0.28, 800, 'bandpass');
+    this._tone(380, 0.3, 'sine', 0.15, 1.6);
+  }
 }
 
 export const audio = new AudioManager();
