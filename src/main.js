@@ -29,6 +29,7 @@ import { ProjectilePool } from './projectiles.js';
 import { spawnAirEnemies, updateAirEnemies } from './airEnemies.js';
 import { spawnGroundMilitary, updateGroundMilitary } from './groundMilitary.js';
 import { spawnKaiju, updateKaiju, kaijuBlocksAOE } from './kaiju.js';
+import { spawnLandmarks, updateLandmarks } from './landmarks.js';
 import { audio } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import {
@@ -262,6 +263,7 @@ let boss = null;         // current level boss (mesh) or null when defeated
 let airEnemies = null;   // Group of flying threats (helicopters, jets, drones)
 let groundMilitary = null; // Group of ground military (tanks, silos, soldiers)
 let kaiju = null;        // Group of rival kaiju (Mecha Titan, Crab, Moth, Scorpion)
+let landmarks = null;    // Group of level-specific structures (oil rigs, reactors, etc.)
 let projectiles = null;  // ProjectilePool — lazily created once
 let playerHitFlash = 0;  // brief red tint when struck by a missile
 let bossDefeated = false;
@@ -472,6 +474,7 @@ function startGame(species) {
   if (airEnemies) { scene.remove(airEnemies); airEnemies = null; }
   if (groundMilitary) { scene.remove(groundMilitary); groundMilitary = null; }
   if (kaiju) { scene.remove(kaiju); kaiju = null; }
+  if (landmarks) { scene.remove(landmarks); landmarks = null; }
   if (projectiles) projectiles.clearAll();
   bossDefeated = false;
   bossBar.classList.add('hidden');
@@ -502,6 +505,7 @@ function startGame(species) {
   airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
   groundMilitary = spawnGroundMilitary(scene, player.position, getGroundMilitaryCounts(selectedLevelKey));
   kaiju = spawnKaiju(scene, player.position, getKaijuCounts(selectedLevelKey));
+  landmarks = spawnLandmarks(scene, getLevel(), player.position);
   // Boss spawns AFTER a grace period so the dino has time to grow first.
   // updateBossTick ticks the timer down each frame.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -704,10 +708,12 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   if (airEnemies) { scene.remove(airEnemies); }
   if (groundMilitary) { scene.remove(groundMilitary); }
   if (kaiju) { scene.remove(kaiju); }
+  if (landmarks) { scene.remove(landmarks); }
   if (projectiles) projectiles.clearAll();
   airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
   groundMilitary = spawnGroundMilitary(scene, player.position, getGroundMilitaryCounts(selectedLevelKey));
   kaiju = spawnKaiju(scene, player.position, getKaijuCounts(selectedLevelKey));
+  landmarks = spawnLandmarks(scene, getLevel(), player.position);
   // Same grace period after game-over respawn so the boss doesn't pile on
   // a fresh, smaller dino immediately.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -1152,6 +1158,7 @@ function frame() {
     if (airEnemies) updateAirEnemies(airEnemies, dt, player.position, projectiles);
     if (groundMilitary) updateGroundMilitary(groundMilitary, dt, player.position, projectiles);
     if (kaiju) updateKaiju(kaiju, dt, player.position, onKaijuTouch, onMothLarva);
+    if (landmarks) updateLandmarks(landmarks, dt, player.position);
     if (projectiles) projectiles.update(dt, player.position, player.scale.x * 1.5, onMissileHitPlayer);
     if (playerHitFlash > 0) playerHitFlash = Math.max(0, playerHitFlash - dt);
     updateBossTick(dt);
@@ -1442,6 +1449,9 @@ function downKaiju(ent) {
   score += u.score || 100;
   addAtomicCharge(u.atomicCharge || 15);
   addGrowth(u.nutrition || 8);
+  runStats.kaijuDowned = (runStats.kaijuDowned || 0) + 1;
+  updateObjectiveProgress();
+  checkObjectiveComplete();
   kaiju.remove(ent);
   // Respawn the same kind after a longer delay than other enemies
   const kaijuType = u.kaijuType;
@@ -1453,6 +1463,41 @@ function downKaiju(ent) {
     while (refresh.children.length) kaiju.add(refresh.children[0]);
     scene.remove(refresh);
   }, 14000 + Math.random() * 6000);
+}
+
+// Eat a level-specific landmark. Reactor cores instantly fill the
+// Atomic Charge meter; everything else is a "building" that
+// recordEvent('buildingsToppled') counts toward the topple objectives.
+function downLandmark(obj) {
+  if (!landmarks) return;
+  const u = obj.userData;
+  particles.debris(obj.position);
+  particles.sparkles(obj.position);
+  audio.crumble && audio.crumble();
+  shake = Math.max(shake, 0.5);
+  haptics.huge();
+  if (u.kind === 'reactor') {
+    // Special: drink the reactor, charge bar fills instantly
+    if (player && player.userData.species === 'titan') {
+      player.userData.atomicCharge = ATOMIC_CHARGE_MAX;
+      player.userData.atomicChargeFullJustNow = true;
+      audio.atomicFull && audio.atomicFull();
+      updateAtomicHUD();
+    }
+    score += u.score || 80;
+    addGrowth(8);
+    runStats.reactorsEaten = (runStats.reactorsEaten || 0) + 1;
+    updateObjectiveProgress();
+    checkObjectiveComplete();
+  } else {
+    score += u.score || 50;
+    addGrowth(3);
+    if (u.subtype === 'oilRig') {
+      runStats.oilRigsToppled = (runStats.oilRigsToppled || 0) + 1;
+    }
+    recordEvent('buildingsToppled');
+  }
+  landmarks.remove(obj);
 }
 
 function downGroundEnemy(ent) {
@@ -1467,6 +1512,12 @@ function downGroundEnemy(ent) {
   score += u.score || 10;
   addAtomicCharge(u.atomicCharge || 5);
   addGrowth(u.nutrition || 2);
+  runStats.groundDestroyed = (runStats.groundDestroyed || 0) + 1;
+  if (u.groundType === 'tank') {
+    runStats.tanksDestroyed = (runStats.tanksDestroyed || 0) + 1;
+  }
+  updateObjectiveProgress();
+  checkObjectiveComplete();
   groundMilitary.remove(ent);
   // Respawn the same kind after a delay
   const groundType = u.groundType;
@@ -1645,6 +1696,10 @@ function objectiveCurrent() {
     case 'chompVehicles':  return runStats.vehiclesChomped;
     case 'hatchBabies':    return runStats.babiesHatched;
     case 'topple':         return runStats.buildingsToppled;
+    case 'reactorsEaten':  return runStats.reactorsEaten || 0;
+    case 'kaijuDowned':    return runStats.kaijuDowned || 0;
+    case 'destroyGround':  return runStats.tanksDestroyed || 0;
+    case 'oilRigsToppled': return runStats.oilRigsToppled || 0;
     default: return 0;
   }
 }
@@ -1866,6 +1921,8 @@ function consumeInCone(origin, fwd, range, coneCos) {
   eat(groundMilitary, (g) => downGroundEnemy(g));
   // Kaiju — Mecha shield deflects beams too
   eat(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
+  // Landmarks fall the same way as buildings
+  eat(landmarks, (lm) => downLandmark(lm));
 
   eat(foods, (f) => {
     const pType = f.userData.particleType || 'leaves';
@@ -2345,6 +2402,8 @@ function consumeAround(origin, range) {
   check(groundMilitary, (g) => downGroundEnemy(g));
   // Kaiju — Mecha shield blocks AOE; others fall like anything else
   check(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
+  // Landmarks (oil rigs, radar dishes, cooling towers, reactors)
+  check(landmarks, (lm) => downLandmark(lm));
   // Plants — critical for herbivore Sweep/Smash to feel responsive
   check(plants, (p) => {
     particles.leaves(p.position);
@@ -2735,6 +2794,19 @@ function handleEating(dt) {
       recordEvent('plantsEaten');
       haptics.tap();
       spawnPlantRandom(plants);
+    }
+  }
+
+  // Reactor cores — walk into one as Titan, the meter fills instantly.
+  // Other landmarks are topple-only (handled by AOE/beams).
+  if (landmarks) {
+    for (let i = landmarks.children.length - 1; i >= 0; i--) {
+      const lm = landmarks.children[i];
+      if (lm.userData.kind !== 'reactor') continue;
+      const d = lm.position.distanceTo(player.position);
+      if (d < (playerSize + lm.userData.size) * 0.7 * reachBoost) {
+        downLandmark(lm);
+      }
     }
   }
 
