@@ -13,6 +13,7 @@ import {
   populate,
   spawnEnemy,
   spawnCritter,
+  buildCritterEnt,
   STAGE_NAMES,
   STAGE_SCALE,
   STAGE_THRESHOLD,
@@ -27,6 +28,7 @@ import { spawnBoss, updateBoss, damageBoss, BOSS_DATA } from './bosses.js';
 import { ProjectilePool } from './projectiles.js';
 import { spawnAirEnemies, updateAirEnemies } from './airEnemies.js';
 import { spawnGroundMilitary, updateGroundMilitary } from './groundMilitary.js';
+import { spawnKaiju, updateKaiju, kaijuBlocksAOE } from './kaiju.js';
 import { audio } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import {
@@ -259,6 +261,7 @@ let buildings = null;    // Group of destructible city buildings (City Rampage)
 let boss = null;         // current level boss (mesh) or null when defeated
 let airEnemies = null;   // Group of flying threats (helicopters, jets, drones)
 let groundMilitary = null; // Group of ground military (tanks, silos, soldiers)
+let kaiju = null;        // Group of rival kaiju (Mecha Titan, Crab, Moth, Scorpion)
 let projectiles = null;  // ProjectilePool — lazily created once
 let playerHitFlash = 0;  // brief red tint when struck by a missile
 let bossDefeated = false;
@@ -468,6 +471,7 @@ function startGame(species) {
   if (boss) { scene.remove(boss); boss = null; }
   if (airEnemies) { scene.remove(airEnemies); airEnemies = null; }
   if (groundMilitary) { scene.remove(groundMilitary); groundMilitary = null; }
+  if (kaiju) { scene.remove(kaiju); kaiju = null; }
   if (projectiles) projectiles.clearAll();
   bossDefeated = false;
   bossBar.classList.add('hidden');
@@ -497,6 +501,7 @@ function startGame(species) {
   if (!projectiles) projectiles = new ProjectilePool(scene);
   airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
   groundMilitary = spawnGroundMilitary(scene, player.position, getGroundMilitaryCounts(selectedLevelKey));
+  kaiju = spawnKaiju(scene, player.position, getKaijuCounts(selectedLevelKey));
   // Boss spawns AFTER a grace period so the dino has time to grow first.
   // updateBossTick ticks the timer down each frame.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -698,9 +703,11 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   homeNest = buildHomeNest(scene);
   if (airEnemies) { scene.remove(airEnemies); }
   if (groundMilitary) { scene.remove(groundMilitary); }
+  if (kaiju) { scene.remove(kaiju); }
   if (projectiles) projectiles.clearAll();
   airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
   groundMilitary = spawnGroundMilitary(scene, player.position, getGroundMilitaryCounts(selectedLevelKey));
+  kaiju = spawnKaiju(scene, player.position, getKaijuCounts(selectedLevelKey));
   // Same grace period after game-over respawn so the boss doesn't pile on
   // a fresh, smaller dino immediately.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -1144,6 +1151,7 @@ function frame() {
     if (buildings) animateBuildings(buildings, dt, particles);
     if (airEnemies) updateAirEnemies(airEnemies, dt, player.position, projectiles);
     if (groundMilitary) updateGroundMilitary(groundMilitary, dt, player.position, projectiles);
+    if (kaiju) updateKaiju(kaiju, dt, player.position, onKaijuTouch, onMothLarva);
     if (projectiles) projectiles.update(dt, player.position, player.scale.x * 1.5, onMissileHitPlayer);
     if (playerHitFlash > 0) playerHitFlash = Math.max(0, playerHitFlash - dt);
     updateBossTick(dt);
@@ -1390,6 +1398,63 @@ function onMissileHitPlayer(p) {
   player.position.z += (dz / d) * 0.6;
 }
 
+// Kaiju touch — small knockback + tiny growth loss, no game-over.
+function onKaijuTouch(ent) {
+  if (!player || !gameRunning || gameSettings.invincible) return;
+  audio.crunchMetal && audio.crunchMetal();
+  shake = Math.max(shake, 0.5);
+  haptics.huge();
+  playerHitFlash = 0.4;
+  player.userData.growth = Math.max(
+    STAGE_THRESHOLD[player.userData.stage],
+    player.userData.growth - 4,
+  );
+  updateHUD();
+  const dx = player.position.x - ent.position.x;
+  const dz = player.position.z - ent.position.z;
+  const d = Math.hypot(dx, dz) || 1;
+  player.position.x += (dx / d) * 1.0;
+  player.position.z += (dz / d) * 1.0;
+}
+
+// Giant Moth periodically drops larvae that hatch into critters.
+function onMothLarva(worldPos) {
+  if (!entities) return;
+  const cr = buildCritterEnt();
+  cr.position.set(
+    worldPos.x + (Math.random() - 0.5) * 4,
+    getHeightAt(worldPos.x, worldPos.z),
+    worldPos.z + (Math.random() - 0.5) * 4,
+  );
+  entities.add(cr);
+  particles.sparkles(cr.position);
+}
+
+function downKaiju(ent) {
+  if (!kaiju) return;
+  const u = ent.userData;
+  particles.debris(ent.position);
+  particles.sparkles(ent.position);
+  particles.sparkles(ent.position.clone().add(new THREE.Vector3(0, 3, 0)));
+  audio.crumble && audio.crumble();
+  shake = Math.max(shake, 0.9);
+  haptics.huge();
+  score += u.score || 100;
+  addAtomicCharge(u.atomicCharge || 15);
+  addGrowth(u.nutrition || 8);
+  kaiju.remove(ent);
+  // Respawn the same kind after a longer delay than other enemies
+  const kaijuType = u.kaijuType;
+  setTimeout(() => {
+    if (!gameRunning || !kaiju) return;
+    const counts = { mecha: 0, crab: 0, moth: 0, scorpion: 0 };
+    counts[kaijuType] = 1;
+    const refresh = spawnKaiju(scene, player.position, counts);
+    while (refresh.children.length) kaiju.add(refresh.children[0]);
+    scene.remove(refresh);
+  }, 14000 + Math.random() * 6000);
+}
+
 function downGroundEnemy(ent) {
   if (!groundMilitary) return;
   const u = ent.userData;
@@ -1469,6 +1534,22 @@ function getAirEnemyCounts(levelKey) {
       return { heli: 1, jet: 0, drone: 0 };
     default:
       return { heli: 1, jet: 0, drone: 0 };
+  }
+}
+
+// Per-level kaiju budget. Most kaiju appear sparingly (1-2 in their
+// natural biome). Mecha Titan is the Power Plant marquee; Scorpion is
+// the Lava Throne resident; Crab is harbor flavor; Moth haunts night.
+function getKaijuCounts(levelKey) {
+  switch (levelKey) {
+    case 'powerPlant':  return { mecha: 1, crab: 0, moth: 0, scorpion: 0 };
+    case 'lavaThrone':  return { mecha: 0, crab: 0, moth: 0, scorpion: 2 };
+    case 'harbor':      return { mecha: 0, crab: 2, moth: 0, scorpion: 0 };
+    case 'night':       return { mecha: 0, crab: 0, moth: 1, scorpion: 0 };
+    case 'nightCity':   return { mecha: 0, crab: 0, moth: 1, scorpion: 0 };
+    case 'megacity':    return { mecha: 1, crab: 0, moth: 0, scorpion: 0 };
+    case 'volcano':     return { mecha: 0, crab: 0, moth: 0, scorpion: 1 };
+    default:            return { mecha: 0, crab: 0, moth: 0, scorpion: 0 };
   }
 }
 
@@ -1783,6 +1864,8 @@ function consumeInCone(origin, fwd, range, coneCos) {
   eat(airEnemies, (a) => downAirEnemy(a, true));
   // Ground military — same fate as anything else in the beam path
   eat(groundMilitary, (g) => downGroundEnemy(g));
+  // Kaiju — Mecha shield deflects beams too
+  eat(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
 
   eat(foods, (f) => {
     const pType = f.userData.particleType || 'leaves';
@@ -2260,6 +2343,8 @@ function consumeAround(origin, range) {
   check(airEnemies, (a) => downAirEnemy(a));
   // Ground military — tanks, silos, soldiers fall to the same AOE
   check(groundMilitary, (g) => downGroundEnemy(g));
+  // Kaiju — Mecha shield blocks AOE; others fall like anything else
+  check(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
   // Plants — critical for herbivore Sweep/Smash to feel responsive
   check(plants, (p) => {
     particles.leaves(p.position);
