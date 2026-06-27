@@ -452,6 +452,9 @@ function startGame(species) {
     player.userData.stage = 4;
     player.userData.growth = STAGE_THRESHOLD[4];
   }
+  // Atomic Charge — Titan's stomp-to-unleash meter. Other species
+  // still get the field (cheap) but addAtomicCharge is a no-op for them.
+  player.userData.atomicCharge = 0;
   player.position.set(0, getHeightAt(0, 0), 0);
   applyPlayerScale();
   scene.add(player);
@@ -644,6 +647,8 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   player = buildPlayer(species);
   player.userData.stage = lostStage;
   player.userData.growth = STAGE_THRESHOLD[lostStage];
+  // Wipe Atomic Charge on respawn — pay the cost of dying.
+  player.userData.atomicCharge = 0;
   applyPlayerScale();
   player.position.set(0, getHeightAt(0, 0), 0);
   scene.add(player);
@@ -1300,10 +1305,35 @@ function onBossDefeated() {
 }
 
 // ---------------- Stats / Achievements / Objectives ----------------
+
+// How much Atomic Charge each kind of event awards Titan. Anything not
+// in here grants nothing — food/plants/etc. are growth-only, not charge.
+const ATOMIC_CHARGE_BY_KIND = {
+  buildingsToppled: 8,
+  vehiclesChomped:  6,
+  dinosEaten:       6,
+  crittersEaten:    1,
+};
+const ATOMIC_CHARGE_MAX = 100;
+
+function addAtomicCharge(amount) {
+  if (!player || player.userData.species !== 'titan') return;
+  const before = player.userData.atomicCharge || 0;
+  const after = Math.min(ATOMIC_CHARGE_MAX, before + amount);
+  player.userData.atomicCharge = after;
+  // Fire a one-time "meter just filled" event so A3 (Mega Beam) and A2
+  // (HUD pulse) can hook in later without touching this function.
+  if (before < ATOMIC_CHARGE_MAX && after >= ATOMIC_CHARGE_MAX) {
+    player.userData.atomicChargeFullJustNow = true;
+  }
+}
+
 function recordEvent(kind, n = 1) {
   if (!runStats) return;
   runStats[kind] = (runStats[kind] || 0) + n;
   save.incStat(kind, n);
+  const chargePer = ATOMIC_CHARGE_BY_KIND[kind];
+  if (chargePer) addAtomicCharge(chargePer * n);
   save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
   popAchievementToast();
   updateObjectiveProgress();
