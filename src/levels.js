@@ -164,10 +164,12 @@ export const LEVELS = {
     name: 'Harbor Assault',
     desc: 'Walk out of the sea, smash the docks',
     icon: '⚓',
+    // Seafloor colors — visible through wave troughs so the ground
+    // reads as muted seabed instead of sandy beach poking through.
     biomeColors: {
-      forest: 0x3a5a4a,
-      swamp:  0x2a4a5a,
-      desert: 0xd0c8a8,   // beach sand
+      forest: 0x2a4858,
+      swamp:  0x1f3a4a,
+      desert: 0x4a5c6a,
     },
     sky: { top: 0x2a4a6a, mid: 0x7aa8c4, bottom: 0xe0c898, glow: [0.14, 0.12, 0.08] },
     fog: { color: 0xaac0c8, density: 0.013 },
@@ -177,6 +179,7 @@ export const LEVELS = {
     cloud: { color: 0xeaeaea, emissive: 0.1 },
     weather: null,
     flat: true,
+    aquatic: true,      // no trees/grass/cacti — open seascape
     harbor: true,       // main.js spawns oil rigs + boats
     objective: { kind: 'topple', value: 4, text: 'Topple 4 oil rigs' },
   },

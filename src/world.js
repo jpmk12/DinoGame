@@ -113,7 +113,8 @@ export function buildWorld(scene) {
 
   const tropical = !!level.tropicalTrees;
   // City levels skip natural foliage — buildings (added by main.js) fill it in.
-  const naturalFoliage = !level.city;
+  // Aquatic levels (Harbor) skip it too — open water has no trees or grass.
+  const naturalFoliage = !level.city && !level.aquatic;
 
   // Forest / jungle trees — palms for tropical levels, normal trees otherwise
   for (let i = 0; naturalFoliage && i < 110; i++) {
@@ -168,8 +169,10 @@ export function buildWorld(scene) {
     }
   }
 
-  // Rocks — scatter everywhere AND clump heavily in the boundary mountains
-  for (let i = 0; i < 80; i++) {
+  // Rocks — scatter everywhere AND clump heavily in the boundary mountains.
+  // Aquatic levels get only a few rocks as reef accents, no inland scatter.
+  const rockCount = level.aquatic ? 12 : 80;
+  for (let i = 0; i < rockCount; i++) {
     const x = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     const z = (Math.random() - 0.5) * WORLD_SIZE * 1.95;
     if (Math.hypot(x, z) < 6) continue;
@@ -178,23 +181,27 @@ export function buildWorld(scene) {
     r.scale.setScalar(0.6 + Math.random() * 1.2);
     decorations.add(r);
   }
-  // Extra rocks clinging to the boundary mountain slopes
-  for (let i = 0; i < 80; i++) {
-    const ang = Math.random() * Math.PI * 2;
-    const dist = 92 + Math.random() * 25;
-    const x = Math.cos(ang) * dist;
-    const z = Math.sin(ang) * dist;
-    const r = buildRock();
-    r.position.set(x, getHeightAt(x, z), z);
-    r.scale.setScalar(1.0 + Math.random() * 2.0);
-    decorations.add(r);
+  // Extra rocks clinging to the boundary mountain slopes — skip on aquatic
+  if (!level.aquatic) {
+    for (let i = 0; i < 80; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 92 + Math.random() * 25;
+      const x = Math.cos(ang) * dist;
+      const z = Math.sin(ang) * dist;
+      const r = buildRock();
+      r.position.set(x, getHeightAt(x, z), z);
+      r.scale.setScalar(1.0 + Math.random() * 2.0);
+      decorations.add(r);
+    }
   }
 
-  // Edible plants
+  // Edible plants — skipped on aquatic levels (no grass in the ocean)
   const plants = new THREE.Group();
   scene.add(plants);
-  for (let i = 0; i < 120; i++) {
-    spawnPlantRandom(plants);
+  if (!level.aquatic) {
+    for (let i = 0; i < 120; i++) {
+      spawnPlantRandom(plants);
+    }
   }
 
   // Sky + clouds
