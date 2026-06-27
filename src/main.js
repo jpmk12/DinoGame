@@ -1172,6 +1172,13 @@ function updateBossTick(dt) {
     }
   }
   if (!boss) { bossBar.classList.add('hidden'); return; }
+  // Boss danger ring — same green/red signal as regular enemies
+  if (boss.userData.dangerRingMat && !boss.userData.dying) {
+    const apexMode = power.active === 'apex' || gameSettings.invincible || frenzyTimer > 0;
+    const safe = apexMode || player.scale.x >= boss.userData.scaleVal * 0.95;
+    boss.userData.dangerRingMat.color.setHex(safe ? 0x2aff3a : 0xff3a3a);
+    boss.userData.dangerRingMat.opacity = 0.6 + Math.sin(performance.now() * 0.006) * 0.2;
+  }
   const r = updateBoss(boss, dt, player.position);
   if (r.dead) {
     onBossDefeated();
@@ -1927,9 +1934,19 @@ function updateEntities(dt) {
   // Use the actual rendered scale so all multipliers (scaleMult, growth
   // boost, Mega Mode) factor into predator/prey behavior.
   const playerScale = player.scale.x;
+  const apexMode = power.active === 'apex' || gameSettings.invincible || frenzyTimer > 0;
 
   for (const ent of entities.children) {
     const d = ent.userData;
+
+    // Update the at-feet predator/prey indicator before any early-return.
+    // Green = safe to eat. Red = it will eat you. Apex modes paint
+    // everything green since nothing can hurt you.
+    if (d.dangerRingMat && d.kind === 'enemy') {
+      const safe = apexMode || playerScale >= d.scale * 0.95;
+      d.dangerRingMat.color.setHex(safe ? 0x2aff3a : 0xff3a3a);
+      d.dangerRingMat.opacity = 0.55 + Math.sin(performance.now() * 0.006) * 0.18;
+    }
 
     // Stun (Stomp ability): freeze in place while the timer runs
     if (d.stunTimer > 0) {

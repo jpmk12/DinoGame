@@ -57,7 +57,30 @@ export function buildEnemyDino(speciesKey, stage) {
   dino.userData.speed = (2 + stage * 0.6) * (spec.speedMult || 1.0);
   dino.userData.nutrition = 2 + stage * 4;
   dino.userData.size = effectiveScale * 1.5;
+  dino.add(buildDangerRing(dino));
   return dino;
+}
+
+// Floor ring rendered under every enemy. Recolored each frame in the
+// main update loop based on whether the player is big enough to eat
+// them: green = safe to eat, red = will eat you. Built on a unique
+// material so every enemy can be colored independently.
+function buildDangerRing(dino) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x2aff3a,
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.45, 24), mat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.04;
+  ring.renderOrder = 2;
+  ring.userData.isDangerRing = true;
+  dino.userData.dangerRing = ring;
+  dino.userData.dangerRingMat = mat;
+  return ring;
 }
 
 /**

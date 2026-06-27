@@ -8,13 +8,13 @@ import { PLAYABLE_RADIUS, getHeightAt } from './world.js';
 // spot it from far away), a healthbar, and aggressive AI.
 
 export const BOSS_DATA = {
-  lostWorld:   { name: 'The Apex',       species: 'trex',    scale: 2.3, health: 18, color: 0xa84a3a, crown: 0xffd24a },
-  volcano:     { name: 'Magmasaur',      species: 'spino',   scale: 2.4, health: 22, color: 0xff5a2a, crown: 0xff9a3a },
-  tundra:      { name: 'Ice Titan',      species: 'stego',   scale: 2.3, health: 22, color: 0x88aacc, crown: 0xcfeaff },
-  dinoPark:    { name: 'Park Captain',   species: 'raptor',  scale: 2.0, health: 18, color: 0x4a8a4a, crown: 0xc04040 },
-  night:       { name: 'Shadow Maw',     species: 'raptor',  scale: 2.2, health: 20, color: 0x222a4a, crown: 0x88aaff },
-  cityRampage: { name: 'The Brute',      species: 'titan',   scale: 1.5, health: 18, color: 0x4a2a3a, crown: 0xff5a3a, speed: 3.0 },
-  nightCity:   { name: 'Neon Wraith',    species: 'titan',   scale: 1.5, health: 18, color: 0x2a3a55, crown: 0x66e6ff, speed: 3.0 },
+  lostWorld:   { name: 'The Apex',       species: 'trex',    scale: 2.3, health: 8,  color: 0xa84a3a, crown: 0xffd24a },
+  volcano:     { name: 'Magmasaur',      species: 'spino',   scale: 2.4, health: 10, color: 0xff5a2a, crown: 0xff9a3a },
+  tundra:      { name: 'Ice Titan',      species: 'stego',   scale: 2.3, health: 10, color: 0x88aacc, crown: 0xcfeaff },
+  dinoPark:    { name: 'Park Captain',   species: 'raptor',  scale: 2.0, health: 8,  color: 0x4a8a4a, crown: 0xc04040 },
+  night:       { name: 'Shadow Maw',     species: 'raptor',  scale: 2.2, health: 9,  color: 0x222a4a, crown: 0x88aaff },
+  cityRampage: { name: 'The Brute',      species: 'titan',   scale: 1.5, health: 8,  color: 0x4a2a3a, crown: 0xff5a3a, speed: 2.4 },
+  nightCity:   { name: 'Neon Wraith',    species: 'titan',   scale: 1.5, health: 8,  color: 0x2a3a55, crown: 0x66e6ff, speed: 2.4 },
 };
 
 export function buildBoss(levelKey) {
@@ -53,13 +53,31 @@ export function buildBoss(levelKey) {
   beacon.position.y = 6.5;
   mesh.add(beacon);
 
+  // Danger ring at the feet, recolored by the main loop based on whether
+  // the current player size can eat this boss. Same UX as regular enemies.
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0xff3a3a,
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.45, 28), ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.04;
+  ring.renderOrder = 2;
+  mesh.add(ring);
+  mesh.userData.dangerRing = ring;
+  mesh.userData.dangerRingMat = ringMat;
+
   mesh.userData.kind = 'boss';
   mesh.userData.name = data.name;
   mesh.userData.health = data.health;
   mesh.userData.maxHealth = data.health;
   // Speed: city bosses chase noticeably slower so the cramped streets stay
-  // playable; outdoor bosses still hustle. Per-boss override via data.speed.
-  const baseSpeed = data.speed != null ? data.speed : (3 + data.scale * 0.7);
+  // playable; outdoor bosses still hustle. Tuned down across the board for
+  // young kids so the boss is catchable but not punishing.
+  const baseSpeed = data.speed != null ? data.speed : (2.3 + data.scale * 0.5);
   mesh.userData.speed = baseSpeed;
   mesh.userData.scaleVal = data.scale;
   mesh.userData.size = data.scale * 1.5;
