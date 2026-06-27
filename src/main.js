@@ -26,6 +26,7 @@ import { updateWater, buildWaterRect } from './water.js';
 import { spawnBoss, updateBoss, damageBoss, BOSS_DATA } from './bosses.js';
 import { ProjectilePool } from './projectiles.js';
 import { spawnAirEnemies, updateAirEnemies } from './airEnemies.js';
+import { spawnGroundMilitary, updateGroundMilitary } from './groundMilitary.js';
 import { audio } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import {
@@ -257,6 +258,7 @@ let vehicles = null;     // Group of vehicles (jeeps or cars, level-dependent)
 let buildings = null;    // Group of destructible city buildings (City Rampage)
 let boss = null;         // current level boss (mesh) or null when defeated
 let airEnemies = null;   // Group of flying threats (helicopters, jets, drones)
+let groundMilitary = null; // Group of ground military (tanks, silos, soldiers)
 let projectiles = null;  // ProjectilePool — lazily created once
 let playerHitFlash = 0;  // brief red tint when struck by a missile
 let bossDefeated = false;
@@ -465,6 +467,7 @@ function startGame(species) {
   if (homeNest) scene.remove(homeNest);
   if (boss) { scene.remove(boss); boss = null; }
   if (airEnemies) { scene.remove(airEnemies); airEnemies = null; }
+  if (groundMilitary) { scene.remove(groundMilitary); groundMilitary = null; }
   if (projectiles) projectiles.clearAll();
   bossDefeated = false;
   bossBar.classList.add('hidden');
@@ -493,6 +496,7 @@ function startGame(species) {
   homeRegenAccum = 0;
   if (!projectiles) projectiles = new ProjectilePool(scene);
   airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
+  groundMilitary = spawnGroundMilitary(scene, player.position, getGroundMilitaryCounts(selectedLevelKey));
   // Boss spawns AFTER a grace period so the dino has time to grow first.
   // updateBossTick ticks the timer down each frame.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -693,8 +697,10 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
   if (airEnemies) { scene.remove(airEnemies); }
+  if (groundMilitary) { scene.remove(groundMilitary); }
   if (projectiles) projectiles.clearAll();
   airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
+  groundMilitary = spawnGroundMilitary(scene, player.position, getGroundMilitaryCounts(selectedLevelKey));
   // Same grace period after game-over respawn so the boss doesn't pile on
   // a fresh, smaller dino immediately.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -1137,6 +1143,7 @@ function frame() {
     if (vehicles && animateVehicles(vehicles, dt, player.position)) audio.carHonk();
     if (buildings) animateBuildings(buildings, dt, particles);
     if (airEnemies) updateAirEnemies(airEnemies, dt, player.position, projectiles);
+    if (groundMilitary) updateGroundMilitary(groundMilitary, dt, player.position, projectiles);
     if (projectiles) projectiles.update(dt, player.position, player.scale.x * 1.5, onMissileHitPlayer);
     if (playerHitFlash > 0) playerHitFlash = Math.max(0, playerHitFlash - dt);
     updateBossTick(dt);
@@ -1383,6 +1390,31 @@ function onMissileHitPlayer(p) {
   player.position.z += (dz / d) * 0.6;
 }
 
+function downGroundEnemy(ent) {
+  if (!groundMilitary) return;
+  const u = ent.userData;
+  particles.debris(ent.position);
+  particles.dust(ent.position);
+  if (u.groundType === 'silo' || u.groundType === 'tank') {
+    audio.crumble && audio.crumble();
+    shake = Math.max(shake, 0.4);
+  }
+  score += u.score || 10;
+  addAtomicCharge(u.atomicCharge || 5);
+  addGrowth(u.nutrition || 2);
+  groundMilitary.remove(ent);
+  // Respawn the same kind after a delay
+  const groundType = u.groundType;
+  setTimeout(() => {
+    if (!gameRunning || !groundMilitary) return;
+    const counts = { tank: 0, silo: 0, soldier: 0 };
+    counts[groundType] = 1;
+    const refresh = spawnGroundMilitary(scene, player.position, counts);
+    while (refresh.children.length) groundMilitary.add(refresh.children[0]);
+    scene.remove(refresh);
+  }, 7000 + Math.random() * 4000);
+}
+
 function downAirEnemy(ent, fromBeam = false) {
   if (!airEnemies) return;
   const u = ent.userData;
@@ -1415,6 +1447,18 @@ function getAirEnemyCounts(levelKey) {
     case 'cityRampage':
     case 'nightCity':
       return { heli: 2, jet: 1, drone: 3 };
+    case 'megacity':
+      return { heli: 2, jet: 2, drone: 6 };
+    case 'harbor':
+      return { heli: 2, jet: 1, drone: 1 };
+    case 'military':
+      return { heli: 3, jet: 2, drone: 2 };
+    case 'highway':
+      return { heli: 1, jet: 3, drone: 0 };
+    case 'powerPlant':
+      return { heli: 2, jet: 1, drone: 2 };
+    case 'lavaThrone':
+      return { heli: 0, jet: 0, drone: 0 };
     case 'dinoPark':
       return { heli: 1, jet: 0, drone: 0 };
     case 'volcano':
@@ -1425,6 +1469,28 @@ function getAirEnemyCounts(levelKey) {
       return { heli: 1, jet: 0, drone: 0 };
     default:
       return { heli: 1, jet: 0, drone: 0 };
+  }
+}
+
+// Per-level ground-military budget. Military Base is the marquee; other
+// levels get a sprinkling for flavor.
+function getGroundMilitaryCounts(levelKey) {
+  switch (levelKey) {
+    case 'military':
+      return { tank: 4, silo: 3, soldier: 6 };
+    case 'cityRampage':
+    case 'nightCity':
+      return { tank: 2, silo: 1, soldier: 3 };
+    case 'megacity':
+      return { tank: 2, silo: 2, soldier: 4 };
+    case 'harbor':
+      return { tank: 1, silo: 1, soldier: 2 };
+    case 'highway':
+      return { tank: 3, silo: 0, soldier: 2 };
+    case 'powerPlant':
+      return { tank: 1, silo: 2, soldier: 3 };
+    default:
+      return { tank: 0, silo: 0, soldier: 0 };
   }
 }
 
@@ -1715,6 +1781,8 @@ function consumeInCone(origin, fwd, range, coneCos) {
 
   // Air enemies — Plasma Breath / Sweep / Mega all melt them
   eat(airEnemies, (a) => downAirEnemy(a, true));
+  // Ground military — same fate as anything else in the beam path
+  eat(groundMilitary, (g) => downGroundEnemy(g));
 
   eat(foods, (f) => {
     const pType = f.userData.particleType || 'leaves';
@@ -2190,6 +2258,8 @@ function consumeAround(origin, range) {
   });
   // Air enemies — Plasma Pulse / Stomp Quake / Sweep all reach them
   check(airEnemies, (a) => downAirEnemy(a));
+  // Ground military — tanks, silos, soldiers fall to the same AOE
+  check(groundMilitary, (g) => downGroundEnemy(g));
   // Plants — critical for herbivore Sweep/Smash to feel responsive
   check(plants, (p) => {
     particles.leaves(p.position);
