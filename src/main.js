@@ -259,6 +259,9 @@ let bossDefeated = false;
 // + respawn. The boss spawns when this hits 0 (or never, if already
 // defeated for this run).
 const BOSS_SPAWN_DELAY = 45;
+// Master switch — bosses temporarily disabled while we tune the difficulty
+// curve for young kids. Flip back to true to restore per-level bosses.
+const BOSSES_ENABLED = false;
 let bossSpawnTimer = 0;
 let babies = [];         // active baby dinos (THREE.Group instances)
 
@@ -1218,6 +1221,11 @@ function updateHome(dt) {
 
 // ---------------- Boss handling ----------------
 function updateBossTick(dt) {
+  if (!BOSSES_ENABLED) {
+    if (boss) { scene.remove(boss); boss = null; }
+    bossBar.classList.add('hidden');
+    return;
+  }
   // Grace period: count down to spawn, then summon the boss once.
   if (!boss && !bossDefeated && bossSpawnTimer > 0) {
     bossSpawnTimer -= dt;
