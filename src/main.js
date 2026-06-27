@@ -303,6 +303,20 @@ let pounceStart = new THREE.Vector3();
 let pounceEnd = new THREE.Vector3();
 let frenzyTimer = 0;
 
+// Titan-only state for the chord-rich input scheme.
+let titanBeamMode = null;        // 'sweep' | 'mega' | null
+let titanSweepTickCd = 0;        // throttle Beam Sweep cone consumes
+let megaBeamLife = 0;            // discharge time after a Mega Beam fires
+let beamSweepArmed = false;      // true once hold passes the threshold; reset on release
+let quakeTimer = 0;              // current Stomp Quake leap-slam timer
+let quakeApex = 0;
+let quakeCooldown = 0;
+const QUAKE_DURATION = 0.7;
+const QUAKE_COOLDOWN = 6;
+const PLASMA_PULSE_COST = 25;
+const BEAM_SWEEP_HOLD_THRESHOLD = 0.42;
+const MEGA_BEAM_HOLD_THRESHOLD = 1.0;
+
 // Pause + level-objective tracking
 let paused = false;
 let runStats = null;          // counters specific to the current run for objectives
@@ -330,6 +344,9 @@ const powerupIndicator = document.getElementById('powerup-indicator');
 const powerupIcon = document.getElementById('powerup-icon');
 const powerupName = document.getElementById('powerup-name');
 const powerupTimer = document.getElementById('powerup-timer');
+const atomicIndicator = document.getElementById('atomic-indicator');
+const atomicFill = document.getElementById('atomic-fill');
+const atomicLabel = document.getElementById('atomic-label');
 const factToast = document.getElementById('fact-toast');
 const factText = document.getElementById('fact-text');
 const winScreen = document.getElementById('win-screen');
@@ -476,6 +493,12 @@ function startGame(species) {
   power.timeLeft = 0;
   abilityCooldown = 0;
   chargeTimer = pounceTimer = frenzyTimer = 0;
+  titanBeamMode = null;
+  titanSweepTickCd = 0;
+  megaBeamLife = 0;
+  beamSweepArmed = false;
+  quakeTimer = 0;
+  quakeCooldown = 0;
   clearBeam();
 
   // Per-run counters for the objective tracker
@@ -511,6 +534,7 @@ function startGame(species) {
   else tutorialBubble.classList.add('hidden');
 
   updateHUD();
+  updateAtomicHUD();
   hudEl.classList.remove('hidden');
   touchControls.classList.remove('hidden');
   menuBtn.classList.remove('hidden');
@@ -722,6 +746,23 @@ function updatePowerupHUD() {
   powerupName.textContent = info.name;
   powerupTimer.textContent = Math.ceil(power.timeLeft) + 's';
   powerupIndicator.classList.remove('hidden');
+}
+
+// Atomic Charge meter — Titan only. Hidden for every other species.
+function updateAtomicHUD() {
+  if (!atomicIndicator) return;
+  if (!player || player.userData.species !== 'titan') {
+    atomicIndicator.classList.add('hidden');
+    return;
+  }
+  const charge = player.userData.atomicCharge || 0;
+  const pct = Math.min(100, charge);
+  atomicFill.style.width = pct + '%';
+  const full = pct >= ATOMIC_CHARGE_MAX;
+  atomicIndicator.classList.toggle('full', full);
+  if (full) atomicLabel.textContent = 'MEGA READY — HOLD!';
+  else      atomicLabel.textContent = Math.round(pct) + '%';
+  atomicIndicator.classList.remove('hidden');
 }
 
 function activatePowerup(type) {
@@ -1063,7 +1104,7 @@ const clock = new THREE.Clock();
 
 function frame() {
   const rawDt = clock.getDelta();
-  controls.update();
+  controls.update(Math.min(0.05, rawDt));
   if (paused) {
     // Keep the renderer ticking so the pause overlay is responsive, but
     // don't advance any game state.
@@ -1325,7 +1366,9 @@ function addAtomicCharge(amount) {
   // (HUD pulse) can hook in later without touching this function.
   if (before < ATOMIC_CHARGE_MAX && after >= ATOMIC_CHARGE_MAX) {
     player.userData.atomicChargeFullJustNow = true;
+    audio.atomicFull && audio.atomicFull();
   }
+  updateAtomicHUD();
 }
 
 function recordEvent(kind, n = 1) {
@@ -1661,6 +1704,227 @@ function firePlasmaBreath() {
   }, 280);
 }
 
+// ---- New Titan moves (A3, B1, B2, B3, B5) ----
+
+// A3. Mega Beam — held action button + full charge. Drains the entire
+// meter, fires a fat plasma beam at 3× range that levels everything it
+// touches and scorches the boss for big damage.
+function fireMegaBeam() {
+  if (!player || player.userData.species !== 'titan') return;
+  if ((player.userData.atomicCharge || 0) < ATOMIC_CHARGE_MAX) return;
+  player.userData.atomicCharge = 0;
+  player.userData.atomicChargeFullJustNow = false;
+  updateAtomicHUD();
+  audio.megaBeam();
+  plateFlash = 1.4;
+  haptics.huge();
+  shake = Math.max(shake, 1.0);
+  titanBeamMode = 'mega';
+  megaBeamLife = 0.85;
+  const yaw = player.rotation.y - (player.userData.faceFlip || 0);
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const scale = player.scale.x;
+  const mouth = player.position.clone();
+  mouth.y += 2.4 * scale;
+  mouth.add(fwd.clone().multiplyScalar(scale));
+  // Triple-radius beam visual — reuse spawnBeam with a giant scale arg.
+  spawnBeam(mouth, fwd, scale * 3.0);
+  beamLife = 0.85; // matches megaBeamLife so the fade looks right
+  const range = (20 + scale * 6) * 3;
+  // Wide cone that catches even off-axis enemies
+  consumeInCone(mouth, fwd, range, Math.cos(0.8));
+  particles.sparkles(mouth);
+}
+
+// B1. Plasma Pulse — double-tap action button, costs 25 charge. 360°
+// radial plasma burst centered on Titan.
+function firePlasmaPulse() {
+  if (!player || player.userData.species !== 'titan') return;
+  if ((player.userData.atomicCharge || 0) < PLASMA_PULSE_COST) return;
+  player.userData.atomicCharge -= PLASMA_PULSE_COST;
+  updateAtomicHUD();
+  audio.plasmaPulse();
+  plateFlash = Math.max(plateFlash, 0.5);
+  particles.sparkles(player.position.clone().add(new THREE.Vector3(0, 2.4 * player.scale.x, 0)));
+  shake = Math.max(shake, 0.5);
+  haptics.huge();
+  const r = 16 + player.scale.x * 2.5;
+  consumeAround(player.position, r);
+  // Damage boss if in range — pulse is generous
+  if (boss && !boss.userData.dying) {
+    const d = boss.position.distanceTo(player.position);
+    if (d <= r) {
+      const reward = damageBoss(boss, 4);
+      if (reward > 0) { score += reward; onBossDefeated(); }
+      else { score += 8; particles.meat(boss.position); }
+    }
+  }
+}
+
+// B2. Stomp Quake — CHOMP + ACTION chord. Titan leaps up, slams down,
+// ring shockwave knocks down everything in a wide radius on impact.
+function fireStompQuake() {
+  if (quakeCooldown > 0 || quakeTimer > 0) return;
+  audio.stompQuake();
+  quakeTimer = QUAKE_DURATION;
+  quakeApex = 4 + player.scale.x * 2.0;
+  quakeCooldown = QUAKE_COOLDOWN;
+  haptics.huge();
+}
+
+function tickQuake(dt) {
+  if (quakeTimer <= 0) return;
+  const before = quakeTimer;
+  quakeTimer = Math.max(0, quakeTimer - dt);
+  const elapsed = QUAKE_DURATION - quakeTimer;
+  const phaseRise = 0.32;
+  const phaseHold = 0.48;
+  let yOffset;
+  if (elapsed < phaseRise) {
+    const t = elapsed / phaseRise;
+    yOffset = Math.sin(t * Math.PI * 0.5) * quakeApex;
+  } else if (elapsed < phaseHold) {
+    yOffset = quakeApex;
+  } else {
+    const t = (elapsed - phaseHold) / (QUAKE_DURATION - phaseHold);
+    yOffset = (1 - t) * quakeApex;
+  }
+  player.position.y = getHeightAt(player.position.x, player.position.z) + yOffset;
+  // Impact moment — when phase 3 just finished
+  if (before > 0 && quakeTimer === 0) {
+    shake = Math.max(shake, 1.2);
+    haptics.huge();
+    particles.dust(player.position);
+    particles.dust(player.position);
+    const r = 20 + player.scale.x * 3;
+    consumeAround(player.position, r);
+    // Boss takes contact damage from the slam
+    if (boss && !boss.userData.dying) {
+      const d = boss.position.distanceTo(player.position);
+      if (d <= r) {
+        const reward = damageBoss(boss, 3);
+        if (reward > 0) { score += reward; onBossDefeated(); }
+      }
+    }
+  }
+}
+
+// B3. Tail Sweep — pressing ACTION while moving backward. Rear cone AOE
+// that levels a row of buildings behind Titan.
+function fireTailSweep() {
+  audio.tailSweep();
+  particles.dust(player.position);
+  shake = Math.max(shake, 0.4);
+  haptics.big();
+  const yaw = player.rotation.y - (player.userData.faceFlip || 0);
+  const back = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const scale = player.scale.x;
+  const origin = player.position.clone()
+    .add(back.clone().multiplyScalar(scale * 1.2));
+  origin.y += 1.0 * scale;
+  consumeInCone(origin, back, 14 + scale * 3, Math.cos(0.75));
+}
+
+// B5. Beam Sweep — sustained beam that tracks Titan's rotation while
+// the action button is held. Drains charge while active.
+function tickBeamSweep(dt) {
+  if (titanBeamMode !== 'sweep') return;
+  const yaw = player.rotation.y - (player.userData.faceFlip || 0);
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const scale = player.scale.x;
+  const mouth = player.position.clone();
+  mouth.y += 2.4 * scale;
+  mouth.add(fwd.clone().multiplyScalar(scale));
+  // Redraw the beam each frame so it tracks the player.
+  spawnBeam(mouth, fwd, scale * 0.8);
+  beamLife = 0.12; // very short — re-spawned each frame
+  // Periodically vaporize what's in the cone
+  titanSweepTickCd -= dt;
+  if (titanSweepTickCd <= 0) {
+    titanSweepTickCd = 0.22;
+    const range = 15 + scale * 4;
+    consumeInCone(mouth, fwd, range, Math.cos(0.4));
+    // Drain charge per tick
+    player.userData.atomicCharge = Math.max(0, (player.userData.atomicCharge || 0) - 4);
+    updateAtomicHUD();
+  }
+}
+
+function endBeamSweep() {
+  if (titanBeamMode === 'sweep') {
+    titanBeamMode = null;
+    clearBeam();
+  }
+}
+
+function tickMegaBeam(dt) {
+  if (titanBeamMode !== 'mega') return;
+  megaBeamLife -= dt;
+  if (megaBeamLife <= 0) {
+    titanBeamMode = null;
+    clearBeam();
+  }
+}
+
+// Titan's input fork. Distinguished from updateAbility because Titan has
+// a totally different scheme: tap fires Plasma Breath (or Tail Sweep
+// when moving backward), double-tap also fires Plasma Pulse, hold begins
+// Beam Sweep, hold+full-charge unleashes the Mega Beam, chomp+action
+// chord triggers Stomp Quake.
+function updateTitanAbility(dt) {
+  // Mid-Quake: lock out input so the leap-slam plays out cleanly
+  if (quakeTimer > 0) return;
+
+  const blast = controls.blastPressed;
+  const blastHeld = controls.blastHeld;
+  const blastHoldTime = controls.blastHoldTime;
+  const blastDoubleTap = controls.blastDoubleTap;
+  const chompPressed = controls.chompPressed;
+  const movingBackward = controls.move.y > 0.4;
+
+  // 1. Chord: chomp + blast same frame → Stomp Quake. Wins over Plasma.
+  if (blast && chompPressed) {
+    fireStompQuake();
+    beamSweepArmed = false;
+    return;
+  }
+
+  // 2. Single-tap: Plasma Breath (forward) or Tail Sweep (rear). Hold
+  //    state is what unlocks Beam/Mega, so don't gate the initial tap.
+  if (blast) {
+    if (movingBackward) fireTailSweep();
+    else                firePlasmaBreath();
+  }
+
+  // 3. Double-tap on the second press also fires Plasma Pulse (charge gated)
+  if (blastDoubleTap) firePlasmaPulse();
+
+  // 4. Hold-to-charge: arm Beam Sweep after 0.42s of holding. Switch to
+  //    Mega Beam if the meter is full at the 1.0s mark.
+  if (blastHeld && !beamSweepArmed) {
+    if (blastHoldTime >= MEGA_BEAM_HOLD_THRESHOLD &&
+        (player.userData.atomicCharge || 0) >= ATOMIC_CHARGE_MAX) {
+      fireMegaBeam();
+      beamSweepArmed = true; // suppress sweep auto-arm
+    } else if (blastHoldTime >= BEAM_SWEEP_HOLD_THRESHOLD &&
+               (player.userData.atomicCharge || 0) > 0 &&
+               titanBeamMode === null) {
+      titanBeamMode = 'sweep';
+      titanSweepTickCd = 0;
+      beamSweepArmed = true;
+    }
+  }
+  if (!blastHeld) beamSweepArmed = false;
+
+  // 5. Tick active beam modes
+  if (titanBeamMode === 'sweep') {
+    if (!blastHeld || (player.userData.atomicCharge || 0) <= 0) endBeamSweep();
+    else tickBeamSweep(dt);
+  } else if (titanBeamMode === 'mega') {
+    tickMegaBeam(dt);
+  }
+}
+
 // ---- Per-species ability implementations ----
 function fireRoar() {
   audio.abilityRoar();
@@ -1896,21 +2160,37 @@ function updateAbility(dt) {
       blastBtn.classList.remove('cooldown');
     }
   }
-  if (activeAbility && controls.blastPressed && abilityCooldown <= 0) {
+  if (quakeCooldown > 0) quakeCooldown = Math.max(0, quakeCooldown - dt);
+
+  // Titan has a separate chord-rich input scheme; other species fire
+  // their single ability on tap.
+  if (player && player.userData.species === 'titan') {
+    updateTitanAbility(dt);
+  } else if (activeAbility && controls.blastPressed && abilityCooldown <= 0) {
     fireAbility(activeAbility.kind);
   }
 
-  // Dorsal plate glow flares while firing, then settles (Titan only)
-  if (plateFlash > 0) {
-    plateFlash = Math.max(0, plateFlash - dt);
+  // Stomp Quake leap-slam motion (any Titan can use this — see chord above)
+  tickQuake(dt);
+
+  if (plateFlash > 0) plateFlash = Math.max(0, plateFlash - dt);
+  // Titan dorsal plates: emissive intensity scales with current Atomic
+  // Charge so you can SEE the meter charging up on the dino itself. The
+  // existing plateFlash burst stacks on top while firing.
+  if (player && player.userData.species === 'titan') {
     const plates = player.userData.parts && player.userData.parts.plates;
     if (plates && plates[0]) {
-      plates[0].material.emissiveIntensity = 0.9 + plateFlash * 5;
+      const charge = Math.min(1, (player.userData.atomicCharge || 0) / 100);
+      let glow = 0.9 + charge * 2.2 + plateFlash * 5;
+      // Full-meter shimmer: gentle 1.5Hz pulse so you can't miss it
+      if (charge >= 1) glow += 0.6 + Math.sin(performance.now() * 0.009) * 0.6;
+      plates[0].material.emissiveIntensity = glow;
     }
   }
 
-  // Fade out the plasma beam
-  if (beamMesh) {
+  // Fade out the regular plasma beam. Sweep/Mega manage their own beam
+  // lifetime (sweep re-spawns every frame, mega lives a fixed time).
+  if (beamMesh && titanBeamMode === null) {
     beamLife -= dt;
     beamMesh.material.opacity = Math.max(0, beamLife / 0.4) * 0.85;
     if (beamLife <= 0) clearBeam();

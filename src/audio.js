@@ -252,6 +252,42 @@ class AudioManager {
     this._noise(0.4, 0.28, 800, 'bandpass');
     this._tone(380, 0.3, 'sine', 0.15, 1.6);
   }
+
+  // ---- Titan Atomic Charge / new moves ----
+  atomicFull() {
+    // Rising chord, the moment the meter caps. Two stacked fifths.
+    this._tone(440, 0.18, 'sine', 0.22, 2.0);
+    setTimeout(() => this._tone(660, 0.22, 'sine', 0.22, 2.2), 90);
+    setTimeout(() => this._tone(880, 0.32, 'sine', 0.20, 2.0), 200);
+    setTimeout(() => this._noise(0.18, 0.18, 5000, 'highpass'), 200);
+  }
+
+  megaBeam() {
+    // Bigger, lower, longer than plasmaBreath — sustained subbass + bright noise sheath
+    this._tone(70, 0.9, 'sawtooth', 0.4, 0.5);
+    this._tone(140, 0.9, 'sawtooth', 0.3, 0.5);
+    this._noise(0.9, 0.45, 1500, 'bandpass');
+    setTimeout(() => this._tone(320, 0.7, 'sawtooth', 0.32, 0.4), 250);
+  }
+
+  plasmaPulse() {
+    // Quick radial burst — short, bright
+    this._tone(520, 0.12, 'sine', 0.22, 2.4);
+    this._noise(0.22, 0.3, 1800, 'bandpass');
+  }
+
+  stompQuake() {
+    // Earth-shaking double thud
+    this._tone(40, 0.35, 'sawtooth', 0.45, 0.4);
+    this._noise(0.5, 0.4, 120);
+    setTimeout(() => { this._tone(35, 0.4, 'sawtooth', 0.42, 0.4); this._noise(0.45, 0.35, 110); }, 110);
+  }
+
+  tailSweep() {
+    // Heavy whoosh with low impact
+    this._noise(0.45, 0.32, 1100, 'bandpass');
+    this._tone(120, 0.3, 'square', 0.25, 0.45);
+  }
 }
 
 export const audio = new AudioManager();

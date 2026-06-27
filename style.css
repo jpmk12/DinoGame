@@ -635,6 +635,50 @@ html, body {
   to   { box-shadow: 0 0 14px rgba(255, 210, 74, 0.95); }
 }
 
+/* ---------- Atomic Charge meter (Titan) ---------- */
+#atomic-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid #66e6ff;
+  border-radius: 16px;
+  padding: 4px 10px 4px 8px;
+  font-weight: 800;
+  font-size: 12px;
+  color: #cff5ff;
+  text-shadow: 1px 1px 0 #000;
+  letter-spacing: 1px;
+}
+#atomic-indicator.full {
+  animation: atomicFullPulse 0.7s ease-in-out infinite alternate;
+  border-color: #ffffff;
+  color: #ffffff;
+}
+#atomic-icon { font-size: 16px; filter: drop-shadow(0 0 4px #66e6ff); }
+#atomic-bar {
+  width: 120px;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(102, 230, 255, 0.6);
+  border-radius: 6px;
+  overflow: hidden;
+}
+#atomic-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #1a6fa0, #66e6ff, #c8f7ff);
+  box-shadow: 0 0 6px rgba(102, 230, 255, 0.8) inset;
+  transition: width 0.18s ease-out;
+}
+#atomic-indicator.full #atomic-fill {
+  background: linear-gradient(90deg, #c8f7ff, #ffffff, #c8f7ff);
+}
+@keyframes atomicFullPulse {
+  from { box-shadow: 0 0 6px rgba(102, 230, 255, 0.6); }
+  to   { box-shadow: 0 0 22px rgba(200, 247, 255, 1.0); }
+}
+
 /* ---------- Baby indicator ---------- */
 #baby-indicator {
   display: flex;

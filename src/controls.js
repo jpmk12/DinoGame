@@ -8,9 +8,21 @@ export class Controls {
     this.blastPressed = false;  // edge: true for one frame after press
     this._blastFlag = false;
 
+    // Hold / double-tap state for the blast (action) button — Titan uses
+    // these to fork between Plasma Breath, Beam Sweep, Mega Beam, and
+    // the bonus Plasma Pulse on a quick second tap.
+    this.blastHeld = false;        // true while finger/key is physically down
+    this.blastHoldTime = 0;        // seconds blast has been held this press
+    this.blastReleased = false;    // edge: true the frame the button came up
+    this.blastDoubleTap = false;   // edge: true on the SECOND tap within window
+    this._blastDownFlag = false;
+    this._blastUpFlag = false;
+    this._lastBlastTapAt = -1e9;
+
     // Keyboard state
     this.keys = new Set();
     window.addEventListener('keydown', (e) => {
+      if (this.keys.has(e.code)) return; // ignore autorepeat
       this.keys.add(e.code);
       if (e.code === 'Space') {
         this._chompFlag = true;
@@ -18,10 +30,16 @@ export class Controls {
       }
       if (e.code === 'KeyB' || e.code === 'KeyF') {
         this._blastFlag = true;
+        this._blastDownFlag = true;
         e.preventDefault();
       }
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'KeyB' || e.code === 'KeyF') {
+        this._blastUpFlag = true;
+      }
+    });
 
     this._setupJoystick();
     this._setupChompBtn();
@@ -115,16 +133,25 @@ export class Controls {
   _setupBlastBtn() {
     const btn = document.getElementById('blast-btn');
     if (!btn) return;
-    const fire = (e) => {
+    const down = (e) => {
       e.preventDefault();
       this._blastFlag = true;
+      this._blastDownFlag = true;
     };
-    btn.addEventListener('touchstart', fire, { passive: false });
-    btn.addEventListener('mousedown', fire);
+    const up = (e) => {
+      e.preventDefault();
+      this._blastUpFlag = true;
+    };
+    btn.addEventListener('touchstart', down, { passive: false });
+    btn.addEventListener('mousedown', down);
+    btn.addEventListener('touchend', up, { passive: false });
+    btn.addEventListener('touchcancel', up, { passive: false });
+    btn.addEventListener('mouseup', up);
+    btn.addEventListener('mouseleave', up);
   }
 
   // Call once per frame to read state.
-  update() {
+  update(dt = 0) {
     let mx = 0, my = 0;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) my -= 1;
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) my += 1;
@@ -148,5 +175,25 @@ export class Controls {
     this._chompFlag = false;
     this.blastPressed = this._blastFlag;
     this._blastFlag = false;
+
+    // Press / release / hold accounting for the action button.
+    const now = performance.now();
+    this.blastReleased = false;
+    this.blastDoubleTap = false;
+    if (this._blastDownFlag) {
+      this._blastDownFlag = false;
+      this.blastHeld = true;
+      this.blastHoldTime = 0;
+      // Double-tap: second press within 320ms of the previous press
+      if (now - this._lastBlastTapAt < 320) this.blastDoubleTap = true;
+      this._lastBlastTapAt = now;
+    }
+    if (this._blastUpFlag) {
+      this._blastUpFlag = false;
+      if (this.blastHeld) this.blastReleased = true;
+      this.blastHeld = false;
+    }
+    if (this.blastHeld) this.blastHoldTime += dt;
+    else this.blastHoldTime = 0;
   }
 }
