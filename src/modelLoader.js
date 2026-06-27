@@ -442,11 +442,14 @@ export function attachMixer(instance, THREE) {
  * Crossfades between idle / walk / run if those clips exist. No-op for
  * procedural meshes (which keep their hand-coded leg-swing animation).
  */
-export function setMotion(instance, speedNorm, fade = 0.2) {
+export function setMotion(instance, speedNorm, fade = 0.22) {
   if (!instance || !instance.userData.actions) return;
   const acts = instance.userData.actions;
+  // Suppress idle/walk/run swaps while an attack one-shot is playing — it
+  // would clobber the bite animation mid-chomp.
+  if (instance.userData.attackTimer > 0) return;
   let target;
-  if (speedNorm > 0.7)      target = findClip(acts, 'run', 'gallop', 'walking', 'walk', 'idle');
+  if (speedNorm > 0.65)     target = findClip(acts, 'run', 'gallop', 'sprint', 'walking', 'walk', 'idle');
   else if (speedNorm > 0.1) target = findClip(acts, 'walk', 'walking', 'run', 'idle');
   else                      target = findClip(acts, 'idle', 'stand', 'rest');
   if (!target) return;
@@ -454,6 +457,38 @@ export function setMotion(instance, speedNorm, fade = 0.2) {
   if (instance.userData.currentAction) instance.userData.currentAction.fadeOut(fade);
   target.reset().fadeIn(fade).play();
   instance.userData.currentAction = target;
+}
+
+/**
+ * Play a one-shot attack/bite animation, then fall back to whatever the
+ * motion state wants. No-op if the model has no attack-like clip.
+ */
+export function triggerAttack(instance) {
+  if (!instance || !instance.userData.actions) return;
+  const acts = instance.userData.actions;
+  const attack = findClip(acts, 'attack', 'bite', 'chomp', 'eat', 'jump');
+  if (!attack || instance.userData.currentAction === attack) return;
+  if (instance.userData.currentAction) instance.userData.currentAction.fadeOut(0.08);
+  attack.reset();
+  attack.setLoop(THREE.LoopOnce, 1);
+  attack.clampWhenFinished = true;
+  attack.fadeIn(0.08).play();
+  instance.userData.currentAction = attack;
+  // Track an estimated duration so setMotion knows to hold off until
+  // the clip is done.  getClip().duration is reliable on AnimationAction.
+  const dur = (attack.getClip && attack.getClip().duration) || 0.6;
+  instance.userData.attackTimer = Math.max(0.25, Math.min(0.9, dur));
+}
+
+// Tick attack timers so the next setMotion call can resume idle/walk.
+export function tickAttackTimers(instance, dt) {
+  if (!instance) return;
+  if (instance.userData.attackTimer > 0) {
+    instance.userData.attackTimer = Math.max(0, instance.userData.attackTimer - dt);
+    // Clear currentAction so the next setMotion call definitely re-fades
+    // back to idle/walk/run instead of treating attack as still active.
+    if (instance.userData.attackTimer === 0) instance.userData.currentAction = null;
+  }
 }
 
 export function modelStatus() {

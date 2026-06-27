@@ -19,7 +19,7 @@ import {
   MAX_GROWTH,
 } from './entities.js';
 import { SPECIES, PLAYABLE_SPECIES } from './dinos.js';
-import { preloadAllModels, modelStatus, attachMixer, setMotion } from './modelLoader.js';
+import { preloadAllModels, modelStatus, attachMixer, setMotion, triggerAttack, tickAttackTimers } from './modelLoader.js';
 import * as save from './save.js';
 import * as haptics from './haptics.js';
 import { updateWater, buildWaterRect } from './water.js';
@@ -893,6 +893,7 @@ function updateBabies(dt) {
       baby.rotation.y = yaw + (baby.userData.faceFlip || 0);
       moving = true;
     }
+    baby.userData.motionNorm = moving ? (target ? 0.9 : 0.5) : 0;
     animateDino(baby, dt, moving);
 
     // Eat if close enough
@@ -962,6 +963,13 @@ function showStageUp(stage) {
 function animateDino(d, dt, moving) {
   const groundY = getHeightAt(d.position.x, d.position.z);
   const parts = d.userData.parts;
+  // Each dino owns its own idle phase so they don't breathe in unison.
+  if (d.userData.idlePhase === undefined) {
+    d.userData.idlePhase = Math.random() * Math.PI * 2;
+  }
+  d.userData.idlePhase += dt;
+  const ip = d.userData.idlePhase;
+
   // GLB/FBX models don't have procedural parts. If the model also has a
   // real skeletal AnimationMixer (its walk clip is already cycling), we
   // leave the vertical position flat so the bob doesn't add a hop on top
@@ -973,11 +981,14 @@ function animateDino(d, dt, moving) {
       const base = d.userData.flyHeight || 1.5;
       d.position.y = groundY + base + Math.sin(d.userData.walkPhase * 1.2) * 0.25;
     } else if (d.userData.mixer) {
-      d.position.y = groundY;
+      // Tiny breathing rise for mixer-driven dinos in case the idle clip
+      // doesn't add any chest motion of its own. Stays sub-cm so it never
+      // reads as a hop.
+      d.position.y = groundY + (moving ? 0 : Math.sin(ip * 1.5) * 0.012);
     } else {
       const bob = moving
         ? Math.abs(Math.sin(d.userData.walkPhase * 1.5)) * 0.08
-        : 0;
+        : Math.sin(ip * 1.5) * 0.025; // idle breathing
       d.position.y = groundY + bob;
     }
     return;
@@ -989,11 +1000,17 @@ function animateDino(d, dt, moving) {
   const swing = moving ? Math.sin(ph) * 0.6 : Math.sin(ph * 0.3) * 0.05;
   // Pteranodon flaps its wings instead of stepping legs
   if (parts.flying) {
-    if (parts.wingL) parts.wingL.rotation.z = 0.15 + Math.sin(ph * 1.5) * 0.4;
-    if (parts.wingR) parts.wingR.rotation.z = -0.15 - Math.sin(ph * 1.5) * 0.4;
+    const flapRate = moving ? 1.5 : 0.9;
+    const flapAmp = moving ? 0.4 : 0.18;
+    if (parts.wingL) parts.wingL.rotation.z = 0.15 + Math.sin(ph * flapRate) * flapAmp;
+    if (parts.wingR) parts.wingR.rotation.z = -0.15 - Math.sin(ph * flapRate) * flapAmp;
     const base = d.userData.flyHeight || 1.5;
     d.position.y = groundY + base + Math.sin(ph * 1.2) * 0.25;
     if (parts.tail2) parts.tail2.rotation.x = Math.sin(ph * 0.5) * 0.1;
+    if (parts.head) {
+      const baseRotY = (parts.head.userData.baseRotY ??= parts.head.rotation.y);
+      parts.head.rotation.y = baseRotY + Math.sin(ip * 0.5) * 0.18;
+    }
     return;
   }
   if (parts.legL) parts.legL.rotation.x = swing;
@@ -1002,14 +1019,24 @@ function animateDino(d, dt, moving) {
     if (parts.legBL) parts.legBL.rotation.x = -swing;
     if (parts.legBR) parts.legBR.rotation.x = swing;
   }
-  if (parts.tail2) parts.tail2.rotation.y = Math.sin(ph * 0.7) * 0.15;
-  if (parts.tail3) parts.tail3.rotation.y = Math.sin(ph * 0.7 + 0.4) * 0.25;
-  if (parts.head)
-    parts.head.position.y =
-      (parts.head.userData.baseY ??= parts.head.position.y) +
-      Math.sin(ph * 0.8) * 0.03;
-  // Body sits on terrain plus subtle bob
-  const bob = moving ? Math.abs(Math.sin(ph * 2)) * 0.04 : 0;
+  // Tail always sways — more aggressive when walking, subtle when idle
+  const tailAmpA = moving ? 0.15 : 0.10;
+  const tailAmpB = moving ? 0.25 : 0.18;
+  const tailRate = moving ? 0.7 : 0.5;
+  if (parts.tail2) parts.tail2.rotation.y = Math.sin(ph * tailRate) * tailAmpA + Math.sin(ip * 0.7) * 0.06;
+  if (parts.tail3) parts.tail3.rotation.y = Math.sin(ph * tailRate + 0.4) * tailAmpB + Math.sin(ip * 0.7 + 0.5) * 0.08;
+  if (parts.head) {
+    const baseY = (parts.head.userData.baseY ??= parts.head.position.y);
+    const baseRotY = (parts.head.userData.baseRotY ??= parts.head.rotation.y);
+    parts.head.position.y = baseY + Math.sin(ph * 0.8) * 0.03 + Math.sin(ip * 0.9) * 0.025;
+    // Look-around yaw — bigger when idle, smaller when walking
+    parts.head.rotation.y = baseRotY + Math.sin(ip * 0.35) * (moving ? 0.06 : 0.18);
+  }
+  // Body sits on terrain plus subtle bob — even when idle there's a
+  // gentle breathing rise so the dino looks alive instead of frozen.
+  const bob = moving
+    ? Math.abs(Math.sin(ph * 2)) * 0.04
+    : Math.sin(ip * 1.5) * 0.025;
   d.position.y = groundY + bob;
 }
 
@@ -1088,24 +1115,51 @@ function pumpMixers(dt) {
   if (entities) for (const e of entities.children) ensure(e);
   for (const b of babies) ensure(b);
 
-  // Tick all mixers
-  if (player && player.userData.mixer) player.userData.mixer.update(dt);
+  // Tick all mixers + attack timers
+  if (player && player.userData.mixer) {
+    player.userData.mixer.update(dt);
+    tickAttackTimers(player, dt);
+  }
   if (entities) {
     for (const e of entities.children) {
-      if (e.userData.mixer) e.userData.mixer.update(dt);
+      if (e.userData.mixer) {
+        e.userData.mixer.update(dt);
+        tickAttackTimers(e, dt);
+      }
     }
   }
   for (const b of babies) {
-    if (b.userData.mixer) b.userData.mixer.update(dt);
+    if (b.userData.mixer) {
+      b.userData.mixer.update(dt);
+      tickAttackTimers(b, dt);
+    }
+  }
+  if (boss && boss.userData.mixer) {
+    boss.userData.mixer.update(dt);
+    tickAttackTimers(boss, dt);
   }
 
-  // Drive player's animation by movement input.
+  // Drive every mixer-equipped dino by the motion intent recorded during
+  // the entity update. Player intent factors in input speed + abilities;
+  // entities expose `motionNorm` on userData; boss is always charging.
   if (player && player.userData.mixer) {
     const mv = controls.move;
-    const sp = Math.hypot(mv.x, mv.y);
-    let target = sp;
-    if (chargeTimer > 0 || pounceTimer > 0) target = 1.0;
+    let target = Math.hypot(mv.x, mv.y);
+    if (chargeTimer > 0 || pounceTimer > 0 || frenzyTimer > 0) target = 1.0;
     setMotion(player, target);
+  }
+  if (entities) {
+    for (const e of entities.children) {
+      if (!e.userData.mixer) continue;
+      setMotion(e, e.userData.motionNorm || 0);
+    }
+  }
+  for (const b of babies) {
+    if (!b.userData.mixer) continue;
+    setMotion(b, b.userData.motionNorm || 0.4);
+  }
+  if (boss && boss.userData.mixer && !boss.userData.dying) {
+    setMotion(boss, 1.0);
   }
 }
 
@@ -1918,6 +1972,7 @@ function updatePlayer(dt) {
   // Chomp animation
   if (controls.chompPressed) {
     player.userData.chompTimer = 0.0001;
+    if (player.userData.mixer) triggerAttack(player);
   }
   if (player.userData.chompTimer > 0) {
     player.userData.chompTimer += dt;
@@ -1951,12 +2006,14 @@ function updateEntities(dt) {
     // Stun (Stomp ability): freeze in place while the timer runs
     if (d.stunTimer > 0) {
       d.stunTimer -= dt;
+      d.motionNorm = 0;
       animateDino(ent, dt, false);
       continue;
     }
     // Forced flee (Roar ability): override behavior and run from player
     if (d.fleeTimer > 0) {
       d.fleeTimer -= dt;
+      d.motionNorm = 1.0;
       const ax = ent.position.x - player.position.x;
       const az = ent.position.z - player.position.z;
       const al = Math.hypot(ax, az) || 1;
@@ -1996,6 +2053,7 @@ function updateEntities(dt) {
       ent.position.x += d.wanderDir.x * sp * dt;
       ent.position.z += d.wanderDir.z * sp * dt;
       ent.rotation.y = Math.atan2(-d.wanderDir.x, -d.wanderDir.z) + (ent.userData.faceFlip || 0);
+      d.motionNorm = d.fleeing ? 0.9 : 0.35;
       animateDino(ent, dt, true);
     } else if (d.kind === 'enemy') {
       const distToPlayer = ent.position.distanceTo(player.position);
@@ -2017,6 +2075,7 @@ function updateEntities(dt) {
         ent.position.x += dir.x * d.speed * dt;
         ent.position.z += dir.z * d.speed * dt;
         moving = true;
+        d.motionNorm = 1.0;
       } else if (playerBigger && distToPlayer < 18) {
         dir.copy(ent.position).sub(player.position);
         dir.y = 0;
@@ -2024,6 +2083,7 @@ function updateEntities(dt) {
         ent.position.x += dir.x * d.speed * 1.2 * dt;
         ent.position.z += dir.z * d.speed * 1.2 * dt;
         moving = true;
+        d.motionNorm = 1.0;
       } else {
         d.wanderTimer -= dt;
         if (d.wanderTimer <= 0) {
@@ -2038,6 +2098,7 @@ function updateEntities(dt) {
         ent.position.z += d.wanderDir.z * d.speed * 0.4 * dt;
         dir.copy(d.wanderDir);
         moving = d.wanderDir.lengthSq() > 0.001;
+        d.motionNorm = moving ? 0.35 : 0;
       }
 
       if (moving) {
