@@ -24,6 +24,8 @@ import * as save from './save.js';
 import * as haptics from './haptics.js';
 import { updateWater, buildWaterRect } from './water.js';
 import { spawnBoss, updateBoss, damageBoss, BOSS_DATA } from './bosses.js';
+import { ProjectilePool } from './projectiles.js';
+import { spawnAirEnemies, updateAirEnemies } from './airEnemies.js';
 import { audio } from './audio.js';
 import { ParticleSystem } from './particles.js';
 import {
@@ -254,6 +256,9 @@ let foods = null;        // Group of misc foods (mushrooms, fruit, beetles, etc.
 let vehicles = null;     // Group of vehicles (jeeps or cars, level-dependent)
 let buildings = null;    // Group of destructible city buildings (City Rampage)
 let boss = null;         // current level boss (mesh) or null when defeated
+let airEnemies = null;   // Group of flying threats (helicopters, jets, drones)
+let projectiles = null;  // ProjectilePool — lazily created once
+let playerHitFlash = 0;  // brief red tint when struck by a missile
 let bossDefeated = false;
 // Grace period so kids can grow before the boss shows up. Set in startGame
 // + respawn. The boss spawns when this hits 0 (or never, if already
@@ -459,6 +464,8 @@ function startGame(species) {
   if (buildings) scene.remove(buildings);
   if (homeNest) scene.remove(homeNest);
   if (boss) { scene.remove(boss); boss = null; }
+  if (airEnemies) { scene.remove(airEnemies); airEnemies = null; }
+  if (projectiles) projectiles.clearAll();
   bossDefeated = false;
   bossBar.classList.add('hidden');
   removeAllBabies();
@@ -484,6 +491,8 @@ function startGame(species) {
   buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
+  if (!projectiles) projectiles = new ProjectilePool(scene);
+  airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
   // Boss spawns AFTER a grace period so the dino has time to grow first.
   // updateBossTick ticks the timer down each frame.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -683,6 +692,9 @@ document.getElementById('respawn-btn').addEventListener('click', () => {
   vehicles = spawnLevelVehicles();
   buildings = getLevel().city ? spawnCity(scene, player.position) : null;
   homeNest = buildHomeNest(scene);
+  if (airEnemies) { scene.remove(airEnemies); }
+  if (projectiles) projectiles.clearAll();
+  airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
   // Same grace period after game-over respawn so the boss doesn't pile on
   // a fresh, smaller dino immediately.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
@@ -1124,6 +1136,9 @@ function frame() {
     if (foods) animateFoods(foods, dt);
     if (vehicles && animateVehicles(vehicles, dt, player.position)) audio.carHonk();
     if (buildings) animateBuildings(buildings, dt, particles);
+    if (airEnemies) updateAirEnemies(airEnemies, dt, player.position, projectiles);
+    if (projectiles) projectiles.update(dt, player.position, player.scale.x * 1.5, onMissileHitPlayer);
+    if (playerHitFlash > 0) playerHitFlash = Math.max(0, playerHitFlash - dt);
     updateBossTick(dt);
     if (homeNest) animateNest(homeNest, dt);
     updatePowerup(dt);
@@ -1343,6 +1358,74 @@ function onBossDefeated() {
     if (boss) { scene.remove(boss); boss = null; }
     bossBar.classList.add('hidden');
   }, 1400);
+}
+
+// Missile-hit handler — gentle for kids. Small growth loss, screen
+// flash, brief shake. No game-over from rockets, ever.
+function onMissileHitPlayer(p) {
+  if (!player || !gameRunning) return;
+  if (gameSettings.invincible) return;
+  audio.crunchMetal && audio.crunchMetal();
+  particles.debris(p.mesh.position.clone());
+  shake = Math.max(shake, 0.45);
+  haptics.big();
+  playerHitFlash = 0.4;
+  player.userData.growth = Math.max(
+    STAGE_THRESHOLD[player.userData.stage],
+    player.userData.growth - 3,
+  );
+  updateHUD();
+  // Tiny knockback away from impact
+  const dx = player.position.x - p.mesh.position.x;
+  const dz = player.position.z - p.mesh.position.z;
+  const d = Math.hypot(dx, dz) || 1;
+  player.position.x += (dx / d) * 0.6;
+  player.position.z += (dz / d) * 0.6;
+}
+
+function downAirEnemy(ent, fromBeam = false) {
+  if (!airEnemies) return;
+  const u = ent.userData;
+  particles.debris(ent.position);
+  particles.sparkles(ent.position);
+  audio.crumble && audio.crumble();
+  shake = Math.max(shake, fromBeam ? 0.4 : 0.25);
+  score += u.score || 10;
+  addAtomicCharge(u.atomicCharge || 5);
+  addGrowth(u.nutrition || 2);
+  airEnemies.remove(ent);
+  // Respawn the same kind after a delay so the sky stays lively
+  const airType = u.airType;
+  setTimeout(() => {
+    if (!gameRunning || !airEnemies) return;
+    const counts = { heli: 0, jet: 0, drone: 0 };
+    counts[airType === 'heli' ? 'heli' : airType === 'jet' ? 'jet' : 'drone'] = 1;
+    const refresh = spawnAirEnemies(scene, player.position, counts);
+    // Move children into the live group rather than keeping a second one
+    while (refresh.children.length) airEnemies.add(refresh.children[0]);
+    scene.remove(refresh);
+  }, 6000 + Math.random() * 3000);
+}
+
+// Per-level air-enemy budget. Tuned so City Rampage and the Megacity-
+// style levels feel hostile while quieter biomes only get one helicopter
+// in the distance.
+function getAirEnemyCounts(levelKey) {
+  switch (levelKey) {
+    case 'cityRampage':
+    case 'nightCity':
+      return { heli: 2, jet: 1, drone: 3 };
+    case 'dinoPark':
+      return { heli: 1, jet: 0, drone: 0 };
+    case 'volcano':
+      return { heli: 1, jet: 1, drone: 0 };
+    case 'tundra':
+    case 'lostWorld':
+    case 'night':
+      return { heli: 1, jet: 0, drone: 0 };
+    default:
+      return { heli: 1, jet: 0, drone: 0 };
+  }
 }
 
 // ---------------- Stats / Achievements / Objectives ----------------
@@ -1629,6 +1712,9 @@ function consumeInCone(origin, fwd, range, coneCos) {
       spawnCritter(entities, player.position);
     }
   });
+
+  // Air enemies — Plasma Breath / Sweep / Mega all melt them
+  eat(airEnemies, (a) => downAirEnemy(a, true));
 
   eat(foods, (f) => {
     const pType = f.userData.particleType || 'leaves';
@@ -2102,6 +2188,8 @@ function consumeAround(origin, range) {
       spawnCritter(entities, player.position);
     }
   });
+  // Air enemies — Plasma Pulse / Stomp Quake / Sweep all reach them
+  check(airEnemies, (a) => downAirEnemy(a));
   // Plants — critical for herbivore Sweep/Smash to feel responsive
   check(plants, (p) => {
     particles.leaves(p.position);
