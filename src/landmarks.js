@@ -527,10 +527,30 @@ export function spawnLandmarks(scene, level, playerPos) {
   group.userData.kind = 'landmarks';
 
   if (level.harbor) {
-    for (let i = 0; i < 5; i++) addAround(group, buildOilRig(), playerPos, 20, 60);
+    // Spawn a guaranteed cluster around the player so at least one is
+    // visible from spawn, then a scatter farther out for skyline depth.
+    const HARBOR_RIG_SCALE = 1.5;
+    const startAngles = [0, Math.PI * 0.4, Math.PI * 0.85, Math.PI * 1.3, Math.PI * 1.7];
+    for (let i = 0; i < startAngles.length; i++) {
+      const rig = buildOilRig();
+      rig.scale.setScalar(HARBOR_RIG_SCALE);
+      const ang = startAngles[i] + (Math.random() - 0.5) * 0.3;
+      const dist = 16 + Math.random() * 8; // close enough to spot from spawn
+      const x = playerPos.x + Math.cos(ang) * dist;
+      const z = playerPos.z + Math.sin(ang) * dist;
+      rig.position.set(x, getHeightAt(x, z), z);
+      rig.rotation.y = Math.random() * Math.PI * 2;
+      group.add(rig);
+    }
+    // Plus a few farther out for horizon detail
+    for (let i = 0; i < 4; i++) {
+      const rig = buildOilRig();
+      rig.scale.setScalar(HARBOR_RIG_SCALE);
+      addAround(group, rig, playerPos, 35, 75);
+    }
     // Giant water plane around the playable area. Sits just below ground
     // level so buildings + oil rigs poke through the surface.
-    const water = buildWaterRect(PLAYABLE_RADIUS * 2.6, PLAYABLE_RADIUS * 2.6, 64, 64);
+    const water = buildWaterRect(PLAYABLE_RADIUS * 2.6, PLAYABLE_RADIUS * 2.6, 96, 96);
     water.position.y = 0.18;
     water.userData.kind = 'water'; // skip in consume paths via subtype filter
     group.add(water);
