@@ -1155,6 +1155,7 @@ function frame() {
     if (foods) animateFoods(foods, dt);
     if (vehicles && animateVehicles(vehicles, dt, player.position)) audio.carHonk();
     if (buildings) animateBuildings(buildings, dt, particles);
+    if (landmarks) animateBuildings(landmarks, dt, particles);
     if (airEnemies) updateAirEnemies(airEnemies, dt, player.position, projectiles);
     if (groundMilitary) updateGroundMilitary(groundMilitary, dt, player.position, projectiles);
     if (kaiju) updateKaiju(kaiju, dt, player.position, onKaijuTouch, onMothLarva);
@@ -1471,6 +1472,7 @@ function downKaiju(ent) {
 function downLandmark(obj) {
   if (!landmarks) return;
   const u = obj.userData;
+  if (u.falling) return; // already toppling, don't double-count
   particles.debris(obj.position);
   particles.sparkles(obj.position);
   audio.crumble && audio.crumble();
@@ -1489,6 +1491,7 @@ function downLandmark(obj) {
     runStats.reactorsEaten = (runStats.reactorsEaten || 0) + 1;
     updateObjectiveProgress();
     checkObjectiveComplete();
+    landmarks.remove(obj);
   } else {
     score += u.score || 50;
     addGrowth(3);
@@ -1496,8 +1499,10 @@ function downLandmark(obj) {
       runStats.oilRigsToppled = (runStats.oilRigsToppled || 0) + 1;
     }
     recordEvent('buildingsToppled');
+    // Use the same topple animation as regular city buildings — the
+    // animateBuildings tick is already pumping the landmarks group.
+    topple(obj, player.position.x, player.position.z);
   }
-  landmarks.remove(obj);
 }
 
 function downGroundEnemy(ent) {
@@ -1921,8 +1926,12 @@ function consumeInCone(origin, fwd, range, coneCos) {
   eat(groundMilitary, (g) => downGroundEnemy(g));
   // Kaiju — Mecha shield deflects beams too
   eat(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
-  // Landmarks fall the same way as buildings
-  eat(landmarks, (lm) => downLandmark(lm));
+  // Landmarks fall the same way as buildings — skip ambient water/lava
+  eat(landmarks, (lm) => {
+    const k = lm.userData.kind;
+    if (k === 'water' || k === 'lava') return;
+    downLandmark(lm);
+  });
 
   eat(foods, (f) => {
     const pType = f.userData.particleType || 'leaves';
@@ -2402,8 +2411,13 @@ function consumeAround(origin, range) {
   check(groundMilitary, (g) => downGroundEnemy(g));
   // Kaiju — Mecha shield blocks AOE; others fall like anything else
   check(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
-  // Landmarks (oil rigs, radar dishes, cooling towers, reactors)
-  check(landmarks, (lm) => downLandmark(lm));
+  // Landmarks (oil rigs, radar dishes, cooling towers, reactors) — but
+  // skip water surfaces and lava pools, which are atmosphere not targets.
+  check(landmarks, (lm) => {
+    const k = lm.userData.kind;
+    if (k === 'water' || k === 'lava') return;
+    downLandmark(lm);
+  });
   // Plants — critical for herbivore Sweep/Smash to feel responsive
   check(plants, (p) => {
     particles.leaves(p.position);
