@@ -1588,9 +1588,8 @@ function getAirEnemyCounts(levelKey) {
     case 'lavaThrone':
       return { heli: 0, jet: 0, drone: 0 };
     case 'moon':
-      // Drones become "probe satellites" floating overhead. No helis/jets
-      // (no air to fly through), but a fleet of probes feels right.
-      return { heli: 0, jet: 0, drone: 5 };
+      // No air to fly through — no helicopters, jets, or drones in vacuum.
+      return { heli: 0, jet: 0, drone: 0 };
     case 'dinoPark':
       return { heli: 1, jet: 0, drone: 0 };
     case 'volcano':
