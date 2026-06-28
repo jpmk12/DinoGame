@@ -18,6 +18,7 @@ Eat plants, mushrooms, fruit, critters, eggs, watermelons — anything smaller t
 | Species | Stats | Signature ability |
 |---|---|---|
 | T-Rex | Baseline | **Roar** — 22u flee aura |
+| Toro (Allosaurus) | Slightly faster, smaller | **Maul** — 10u forward bite cone |
 | Triceratops | Slower | **Charge** — 1.4s burst dash that smashes prey |
 | Stegosaurus | Slow, plated | **Sweep** — 360° AOE consume |
 | Velociraptor | Fast, small | **Pounce** — 12u forward leap + landing eat |

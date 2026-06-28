@@ -3,6 +3,7 @@
 
 export const DINO_FACTS = {
   trex: "T-Rex had teeth as long as bananas!",
+  toro: "Allosaurus had ridges over its eyes like little horns — and a savage bite!",
   trike: "Triceratops had three sharp horns and a giant bony frill!",
   stego: "Stegosaurus's brain was only the size of a walnut!",
   raptor: "Real Velociraptors were the size of a turkey and had feathers!",

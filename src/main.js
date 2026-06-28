@@ -2298,6 +2298,25 @@ function fireFrenzy() {
   haptics.big();
 }
 
+// Toro the Allosaurus — MAUL. A savage forward bite arc: 10u-deep cone,
+// 70° wide, vaporizes everything caught in front. Distinct from Pounce
+// (no leap) and Sweep (forward, not 360°). Short cooldown so the
+// predator gets to feel relentless.
+function fireMaul() {
+  audio.abilityMaul();
+  particles.meat(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
+  shake = Math.max(shake, 0.35);
+  haptics.huge();
+  player.userData.chompTimer = 0.0001; // visible jaw open
+  const yaw = player.rotation.y - (player.userData.faceFlip || 0);
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const scale = player.scale.x;
+  const origin = player.position.clone()
+    .add(fwd.clone().multiplyScalar(scale * 0.8));
+  origin.y += 1.0 * scale;
+  consumeInCone(origin, fwd, 10 + scale * 2.5, Math.cos(0.7));
+}
+
 // Ankylosaurus tail-club: radial knockback + stun. Tighter radius than
 // Stomp (12u vs 16u), but flings enemies outward and topples buildings.
 function fireSmash() {
@@ -2374,6 +2393,7 @@ function fireAbility(kind) {
   else if (kind === 'smash')    fireSmash();
   else if (kind === 'call')     fireCall();
   else if (kind === 'swoop')    fireSwoop();
+  else if (kind === 'maul')     fireMaul();
   save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
   popAchievementToast();
 }
@@ -2813,14 +2833,35 @@ function handleEating(dt) {
   }
 
   // Reactor cores — walk into one as Titan, the meter fills instantly.
-  // Other landmarks are topple-only (handled by AOE/beams).
+  // Other landmarks are topple-only (handled by AOE/beams + walk-in below).
   if (landmarks) {
     for (let i = landmarks.children.length - 1; i >= 0; i--) {
       const lm = landmarks.children[i];
-      if (lm.userData.kind !== 'reactor') continue;
+      const k = lm.userData.kind;
+      // Atmosphere & ground-paint stay non-interactive
+      if (k === 'water' || k === 'lava' || k === 'runway' || k === 'road') continue;
+      if (lm.userData.falling) continue;
       const d = lm.position.distanceTo(player.position);
-      if (d < (playerSize + lm.userData.size) * 0.7 * reachBoost) {
+      const size = lm.userData.size || lm.userData.radius || 2;
+      if (d < (playerSize + size) * 0.7 * reachBoost) {
+        // Bunkers, towers, hangars, fuel tanks, sandbag walls, radar
+        // dishes, megatowers, cooling towers, oil rigs — all topple
+        // when the dino stomps them. Reactor cores chug-and-fill.
         downLandmark(lm);
+      }
+    }
+  }
+
+  // Ground military — tanks, silos, soldiers all get stomped on contact.
+  // No size gating: the danger ring already signals what's safe, and a
+  // hatchling running through a tank line should be a power-fantasy move.
+  if (groundMilitary) {
+    for (let i = groundMilitary.children.length - 1; i >= 0; i--) {
+      const g = groundMilitary.children[i];
+      const d = g.position.distanceTo(player.position);
+      const size = g.userData.size || 1;
+      if (d < (playerSize + size) * 0.7 * reachBoost) {
+        downGroundEnemy(g);
       }
     }
   }

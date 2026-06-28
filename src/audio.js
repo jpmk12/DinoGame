@@ -253,6 +253,16 @@ class AudioManager {
     this._tone(380, 0.3, 'sine', 0.15, 1.6);
   }
 
+  abilityMaul() {
+    // Savage forward bite — crunchy noise + low growl + bone snap
+    this._noise(0.2, 0.4, 2400, 'highpass');
+    this._tone(110, 0.35, 'sawtooth', 0.32, 0.45);
+    setTimeout(() => {
+      this._noise(0.15, 0.35, 1100, 'bandpass');
+      this._tone(80, 0.2, 'square', 0.28, 0.5);
+    }, 130);
+  }
+
   // ---- Titan Atomic Charge / new moves ----
   atomicFull() {
     // Rising chord, the moment the meter caps. Two stacked fifths.

@@ -239,6 +239,139 @@ export function buildTRex(color = 0x8b3a3a) {
 }
 
 /**
+ * Build an Allosaurus — "Toro". Carnivorous biped, smaller and more
+ * agile than a T-Rex, with distinctive twin brow crests above the eyes
+ * and a longer, slimmer skull. Rust-brown with darker striping.
+ * Faces -Z.
+ */
+export function buildAllo(color = 0xa05a32) {
+  const root = new THREE.Group();
+  const accent = 0x6a2a18;
+  const belly = 0xd4a874;
+  const crestCol = 0xc0381a;
+
+  // Body — slimmer and more horizontal than T-Rex
+  const body = box(0.78, 0.62, 1.4, color);
+  body.position.y = 0.85;
+  root.add(body);
+  // Striped belly stripe
+  const bellyMesh = box(0.74, 0.36, 1.25, belly);
+  bellyMesh.position.set(0, 0.66, 0);
+  root.add(bellyMesh);
+  // Dark dorsal stripe along the back
+  const stripe = box(0.18, 0.06, 1.3, accent);
+  stripe.position.set(0, 1.2, 0);
+  root.add(stripe);
+
+  // Tail — three segments, taper to a whip
+  const tail1 = box(0.48, 0.42, 0.7, color);
+  tail1.position.set(0, 0.85, 0.9);
+  root.add(tail1);
+  const tail2 = box(0.3, 0.3, 0.6, color);
+  tail2.position.set(0, 0.82, 1.5);
+  root.add(tail2);
+  const tail3 = box(0.15, 0.16, 0.55, accent);
+  tail3.position.set(0, 0.8, 2.05);
+  root.add(tail3);
+
+  // Neck — longer than T-Rex, angled forward
+  const neck = box(0.36, 0.42, 0.5, color);
+  neck.position.set(0, 1.18, -0.85);
+  neck.rotation.x = 0.2;
+  root.add(neck);
+
+  // Head — long, narrow snout
+  const head = new THREE.Group();
+  head.position.set(0, 1.32, -1.32);
+  const skull = box(0.48, 0.45, 0.6, color);
+  head.add(skull);
+  // Long snout — Allosaurus signature
+  const snout = box(0.42, 0.36, 0.55, color);
+  snout.position.set(0, -0.04, -0.5);
+  head.add(snout);
+  const jaw = box(0.38, 0.18, 0.95, accent);
+  jaw.position.set(0, -0.26, -0.32);
+  head.add(jaw);
+  // Twin brow crests — Allosaurus had two horn-like ridges over the eyes
+  for (const x of [-0.18, 0.18]) {
+    const crest = new THREE.Mesh(
+      new THREE.ConeGeometry(0.07, 0.22, 5),
+      FLAT(crestCol),
+    );
+    crest.castShadow = true;
+    crest.position.set(x, 0.28, -0.25);
+    crest.rotation.x = -0.2;
+    head.add(crest);
+  }
+  // Slim ridge along top of snout
+  const noseRidge = box(0.08, 0.08, 0.6, accent);
+  noseRidge.position.set(0, 0.2, -0.45);
+  head.add(noseRidge);
+  // Teeth — bigger than T-Rex's, more visible
+  for (let i = -2; i <= 2; i++) {
+    const tooth = box(0.05, 0.14, 0.05, 0xfff8dc);
+    tooth.position.set(i * 0.09, -0.13, -0.62);
+    head.add(tooth);
+  }
+  // Eyes (orange/predator)
+  for (const x of [-0.15, 0.15]) {
+    const eyeWhite = sphere(0.06, 0xfff0a0);
+    eyeWhite.position.set(x, 0.13, -0.3);
+    head.add(eyeWhite);
+    const pupil = sphere(0.03, 0x000000);
+    pupil.position.set(x, 0.13, -0.34);
+    head.add(pupil);
+  }
+  root.add(head);
+
+  // Three-fingered grasping arms — bigger than T-Rex's stubby ones
+  for (const side of [-1, 1]) {
+    const upper = box(0.13, 0.45, 0.13, color);
+    upper.position.set(side * 0.4, 0.85, -0.3);
+    upper.rotation.z = side * 0.2;
+    root.add(upper);
+    const lower = box(0.11, 0.32, 0.11, color);
+    lower.position.set(side * 0.5, 0.5, -0.42);
+    lower.rotation.z = side * 0.35;
+    root.add(lower);
+    // Three claws at the hand
+    for (let i = -1; i <= 1; i++) {
+      const claw = new THREE.Mesh(
+        new THREE.ConeGeometry(0.04, 0.16, 5),
+        FLAT(0x222020),
+      );
+      claw.position.set(side * 0.58 + i * 0.06, 0.32, -0.5);
+      claw.rotation.x = 1.6;
+      root.add(claw);
+    }
+  }
+
+  // Powerful legs
+  const legL = new THREE.Group();
+  legL.position.set(-0.22, 0.55, 0);
+  const legLMesh = box(0.26, 0.95, 0.32, color);
+  legLMesh.position.y = -0.4;
+  legL.add(legLMesh);
+  const footL = box(0.32, 0.16, 0.5, accent);
+  footL.position.set(0, -0.88, -0.05);
+  legL.add(footL);
+  root.add(legL);
+
+  const legR = new THREE.Group();
+  legR.position.set(0.22, 0.55, 0);
+  const legRMesh = box(0.26, 0.95, 0.32, color);
+  legRMesh.position.y = -0.4;
+  legR.add(legRMesh);
+  const footR = box(0.32, 0.16, 0.5, accent);
+  footR.position.set(0, -0.88, -0.05);
+  legR.add(footR);
+  root.add(legR);
+
+  root.userData.parts = { head, tail2, tail3, legL, legR, jaw };
+  return root;
+}
+
+/**
  * Build a Triceratops. Faces -Z.
  */
 export function buildTriceratops(color = 0x5a7a3a) {
@@ -1075,6 +1208,18 @@ export const SPECIES = {
     diet: 'carnivore',
     playable: true,
     ability: { kind: 'roar',   name: 'ROAR',   cooldown: 6 },
+  },
+  toro: {
+    name: 'Toro',
+    desc: 'Allosaurus — savage maul',
+    color: 0xa05a32,
+    build: buildAllo,
+    modelFile: null,         // procedural-only for now; flip to a .glb when a rig ships
+    speedMult: 1.15,         // slightly faster than T-Rex
+    scaleMult: 0.95,         // slightly smaller, more agile
+    diet: 'carnivore',
+    playable: true,
+    ability: { kind: 'maul',  name: 'MAUL',   cooldown: 4 },
   },
   titan: {
     name: 'Titan',
