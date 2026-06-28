@@ -268,6 +268,251 @@ export function buildMegaTower(variant = 'spire') {
   return root;
 }
 
+// ---------- Military: Bunker ----------
+export function buildBunker() {
+  const root = new THREE.Group();
+  const concrete = 0x6a6a5a;
+  const dark = 0x3a3a2a;
+  const sandbag = 0xa49070;
+  // Half-buried concrete dome
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(2.0, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    FLAT(concrete),
+  );
+  dome.scale.set(1.3, 0.7, 1.6);
+  dome.position.y = 0.2;
+  dome.castShadow = true;
+  root.add(dome);
+  // Concrete skirt at the base
+  const skirt = box(3.5, 0.4, 4.2, dark);
+  skirt.position.y = 0.2;
+  root.add(skirt);
+  // Slit observation window (dark front strip)
+  const slit = box(2.0, 0.18, 0.05, 0x111111);
+  slit.position.set(0, 1.05, -2.05);
+  root.add(slit);
+  // Steel door at the back
+  const door = box(0.8, 1.1, 0.06, 0x3a3a3a);
+  door.position.set(0, 0.75, 1.95);
+  root.add(door);
+  // Sandbags piled on top
+  for (let i = 0; i < 5; i++) {
+    const bag = box(0.55, 0.22, 0.32, sandbag);
+    const ang = (i / 5) * Math.PI * 2;
+    bag.position.set(Math.cos(ang) * 1.5, 1.55, Math.sin(ang) * 1.6);
+    bag.rotation.y = ang;
+    root.add(bag);
+  }
+  // Antenna
+  const ant = box(0.06, 1.4, 0.06, 0x222222);
+  ant.position.set(0.5, 2.3, 0.5);
+  root.add(ant);
+
+  root.userData.kind = 'building';
+  root.userData.size = 2.8;
+  root.userData.radius = 2.5;
+  root.userData.score = 75;
+  root.userData.subtype = 'bunker';
+  return root;
+}
+
+// ---------- Military: Guard Tower ----------
+export function buildGuardTower() {
+  const root = new THREE.Group();
+  const wood = 0x5a4a32;
+  const olive = 0x4a5a32;
+  const dark = 0x3a3024;
+  // Four stilt legs
+  for (const [x, z] of [[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]]) {
+    const leg = box(0.2, 5.0, 0.2, wood);
+    leg.position.set(x, 2.5, z);
+    root.add(leg);
+  }
+  // Cross bracing
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2;
+    const brace = box(2.4, 0.12, 0.12, wood);
+    brace.position.y = 2.0;
+    brace.position.x = Math.cos(ang) * 1.0;
+    brace.position.z = Math.sin(ang) * 1.0;
+    brace.rotation.y = ang;
+    root.add(brace);
+  }
+  // Watch platform floor
+  const floor = box(2.6, 0.18, 2.6, dark);
+  floor.position.y = 5.0;
+  root.add(floor);
+  // Walls (low so guard's torso would be visible — open top half)
+  for (let i = 0; i < 4; i++) {
+    const wall = box(2.6, 1.2, 0.14, olive);
+    wall.position.y = 5.7;
+    const ang = (i / 4) * Math.PI * 2;
+    wall.position.x = Math.cos(ang) * 1.3;
+    wall.position.z = Math.sin(ang) * 1.3;
+    wall.rotation.y = ang;
+    root.add(wall);
+  }
+  // Pitched roof — two triangles
+  const roofL = new THREE.Mesh(
+    new THREE.BoxGeometry(3.0, 0.12, 1.6),
+    FLAT(dark),
+  );
+  roofL.position.set(0, 7.0, 0.7);
+  roofL.rotation.x = -0.4;
+  root.add(roofL);
+  const roofR = new THREE.Mesh(
+    new THREE.BoxGeometry(3.0, 0.12, 1.6),
+    FLAT(dark),
+  );
+  roofR.position.set(0, 7.0, -0.7);
+  roofR.rotation.x = 0.4;
+  root.add(roofR);
+  // Spotlight
+  const light = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xfff0a0 }),
+  );
+  light.position.set(1.2, 6.4, 1.2);
+  root.add(light);
+  // Antenna
+  const ant = box(0.05, 1.4, 0.05, 0x222222);
+  ant.position.set(0, 7.8, 0);
+  root.add(ant);
+
+  root.userData.kind = 'building';
+  root.userData.size = 2.4;
+  root.userData.radius = 2.0;
+  root.userData.score = 90;
+  root.userData.subtype = 'guardTower';
+  return root;
+}
+
+// ---------- Military: Hangar ----------
+export function buildHangar() {
+  const root = new THREE.Group();
+  const olive = 0x5a6a4a;
+  const dark = 0x3a4a32;
+  // Wide arched main body — approximate with a half-cylinder
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(4.5, 4.5, 12, 18, 1, true, 0, Math.PI),
+    new THREE.MeshLambertMaterial({ color: olive, side: THREE.DoubleSide }),
+  );
+  body.rotation.z = Math.PI / 2;
+  body.rotation.y = Math.PI;
+  body.position.y = 0;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  root.add(body);
+  // Front wall
+  const front = new THREE.Mesh(
+    new THREE.CircleGeometry(4.5, 18, 0, Math.PI),
+    FLAT(dark),
+  );
+  front.position.set(0, 0, -6);
+  front.rotation.x = 0;
+  root.add(front);
+  // Back wall
+  const back = new THREE.Mesh(
+    new THREE.CircleGeometry(4.5, 18, 0, Math.PI),
+    FLAT(dark),
+  );
+  back.position.set(0, 0, 6);
+  back.rotation.y = Math.PI;
+  root.add(back);
+  // Big front doors (two panels)
+  for (const sign of [-1, 1]) {
+    const door = box(3.5, 3.0, 0.15, 0x44503a);
+    door.position.set(sign * 1.8, 1.5, -6.05);
+    root.add(door);
+  }
+  // White roof stripe (visible from above for visual interest)
+  const stripe = box(0.6, 0.05, 12, 0xe0e0d0);
+  stripe.position.set(0, 4.4, 0);
+  root.add(stripe);
+
+  root.userData.kind = 'building';
+  root.userData.size = 6.0;
+  root.userData.radius = 6.5;
+  root.userData.score = 180;
+  root.userData.subtype = 'hangar';
+  return root;
+}
+
+// ---------- Military: Fuel Tank ----------
+export function buildFuelTank() {
+  const root = new THREE.Group();
+  // Wide white cylinder
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.6, 1.6, 3.0, 18),
+    FLAT(0xeae2d0),
+  );
+  body.position.y = 1.5;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  root.add(body);
+  // Red hazard stripe
+  const stripe = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.62, 1.62, 0.4, 18, 1, true),
+    FLAT(0xc0381a),
+  );
+  stripe.position.y = 1.5;
+  root.add(stripe);
+  // Top cap
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.55, 1.55, 0.3, 18),
+    FLAT(0x9a948a),
+  );
+  cap.position.y = 3.15;
+  root.add(cap);
+  // Pipes / valves on top
+  const pipe1 = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.16, 0.8, 8),
+    FLAT(0x5a5a5a),
+  );
+  pipe1.position.set(0.6, 3.65, 0);
+  root.add(pipe1);
+  const valve = box(0.35, 0.2, 0.35, 0xc04030);
+  valve.position.set(0.6, 4.15, 0);
+  root.add(valve);
+  // Skull-and-bones hazard placard
+  const placard = box(0.6, 0.6, 0.05, 0xf0c020);
+  placard.position.set(0, 1.5, 1.65);
+  root.add(placard);
+
+  root.userData.kind = 'building';
+  root.userData.size = 2.0;
+  root.userData.radius = 1.8;
+  root.userData.score = 100;
+  root.userData.subtype = 'fuelTank';
+  return root;
+}
+
+// ---------- Military: Sandbag Wall ----------
+export function buildSandbagWall(length = 4) {
+  const root = new THREE.Group();
+  const sandbag = 0xa49070;
+  // Two rows of sandbags stacked
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < length; i++) {
+      const bag = box(0.7, 0.32, 0.45, sandbag);
+      bag.position.set(
+        (i - (length - 1) / 2) * 0.72 + (row * 0.36),
+        0.16 + row * 0.32,
+        0,
+      );
+      bag.rotation.y = (Math.random() - 0.5) * 0.15;
+      root.add(bag);
+    }
+  }
+
+  root.userData.kind = 'building';
+  root.userData.size = length * 0.4;
+  root.userData.radius = length * 0.4;
+  root.userData.score = 30 + length * 6;
+  root.userData.subtype = 'sandbagWall';
+  return root;
+}
+
 // ---------- Military: Radar Dish ----------
 export function buildRadarDish() {
   const root = new THREE.Group();
@@ -452,6 +697,84 @@ export function buildBigRig() {
   return root;
 }
 
+// ---------- Military: Runway ----------
+// A long flat strip with a center dashed line, threshold markings at
+// both ends, and shoulder paint. Decoration only — not toppleable.
+export function buildRunway(length = 80, width = 14) {
+  const root = new THREE.Group();
+  // Asphalt slab
+  const asphalt = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, length),
+    new THREE.MeshLambertMaterial({ color: 0x202428 }),
+  );
+  asphalt.rotation.x = -Math.PI / 2;
+  asphalt.position.y = 0.04;
+  asphalt.receiveShadow = true;
+  root.add(asphalt);
+  // White centerline dashes
+  const dashCount = Math.floor(length / 5);
+  for (let i = 0; i < dashCount; i++) {
+    const dash = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.5, 2.0),
+      new THREE.MeshBasicMaterial({ color: 0xeae8d0 }),
+    );
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(0, 0.05, -length / 2 + 2.5 + i * 5);
+    root.add(dash);
+  }
+  // Side white shoulder lines
+  for (const xx of [-width / 2 + 0.4, width / 2 - 0.4]) {
+    const side = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.35, length),
+      new THREE.MeshBasicMaterial({ color: 0xeae8d0 }),
+    );
+    side.rotation.x = -Math.PI / 2;
+    side.position.set(xx, 0.05, 0);
+    root.add(side);
+  }
+  // Threshold "piano keys" at each end
+  for (const endZ of [-length / 2 + 1.5, length / 2 - 1.5]) {
+    for (let i = -3; i <= 3; i++) {
+      const key = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.0, 2.5),
+        new THREE.MeshBasicMaterial({ color: 0xeae8d0 }),
+      );
+      key.rotation.x = -Math.PI / 2;
+      key.position.set(i * 1.3, 0.06, endZ);
+      root.add(key);
+    }
+  }
+
+  root.userData.kind = 'runway';
+  return root;
+}
+
+// ---------- Military: Road (connector strip) ----------
+export function buildRoad(length = 30, width = 4) {
+  const root = new THREE.Group();
+  const asphalt = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, length),
+    new THREE.MeshLambertMaterial({ color: 0x35383d }),
+  );
+  asphalt.rotation.x = -Math.PI / 2;
+  asphalt.position.y = 0.035;
+  asphalt.receiveShadow = true;
+  root.add(asphalt);
+  // Yellow centerline dashes
+  const dashCount = Math.floor(length / 4);
+  for (let i = 0; i < dashCount; i++) {
+    const dash = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.3, 1.5),
+      new THREE.MeshBasicMaterial({ color: 0xd9c24a }),
+    );
+    dash.rotation.x = -Math.PI / 2;
+    dash.position.set(0, 0.045, -length / 2 + 2 + i * 4);
+    root.add(dash);
+  }
+  root.userData.kind = 'road';
+  return root;
+}
+
 // ---------- Lava Throne: Lava Pool (hazard + visual) ----------
 export function buildLavaPool() {
   const root = new THREE.Group();
@@ -556,7 +879,85 @@ export function spawnLandmarks(scene, level, playerPos) {
     group.add(water);
   }
   if (level.military) {
-    for (let i = 0; i < 4; i++) addAround(group, buildRadarDish(), playerPos, 18, 60);
+    // Anchor the base with one big runway running N/S right past spawn.
+    // Random rotation so each session reads slightly different.
+    const runwayRot = (Math.random() < 0.5 ? 0 : Math.PI / 2);
+    const runwayCx = playerPos.x + Math.cos(runwayRot + Math.PI / 2) * 18;
+    const runwayCz = playerPos.z + Math.sin(runwayRot + Math.PI / 2) * 18;
+    const runway = buildRunway(80, 14);
+    runway.position.set(runwayCx, getHeightAt(runwayCx, runwayCz), runwayCz);
+    runway.rotation.y = runwayRot;
+    group.add(runway);
+
+    // Two parked fuel tanks beside the runway
+    for (let i = 0; i < 2; i++) {
+      const tank = buildFuelTank();
+      const lateralOff = (i === 0 ? -1 : 1) * 9;
+      const longOff = -20 + i * 12;
+      const tx = runwayCx + Math.cos(runwayRot) * lateralOff + Math.cos(runwayRot + Math.PI / 2) * longOff;
+      const tz = runwayCz + Math.sin(runwayRot) * lateralOff + Math.sin(runwayRot + Math.PI / 2) * longOff;
+      tank.position.set(tx, getHeightAt(tx, tz), tz);
+      group.add(tank);
+    }
+
+    // A hangar at one end of the runway
+    const hangar = buildHangar();
+    const hangarOff = 36;
+    const hx = runwayCx + Math.cos(runwayRot + Math.PI / 2) * hangarOff;
+    const hz = runwayCz + Math.sin(runwayRot + Math.PI / 2) * hangarOff;
+    hangar.position.set(hx, getHeightAt(hx, hz), hz);
+    hangar.rotation.y = runwayRot;
+    group.add(hangar);
+
+    // A second hangar at the other end (rotated)
+    const hangar2 = buildHangar();
+    const h2x = runwayCx + Math.cos(runwayRot + Math.PI / 2) * -hangarOff;
+    const h2z = runwayCz + Math.sin(runwayRot + Math.PI / 2) * -hangarOff;
+    hangar2.position.set(h2x, getHeightAt(h2x, h2z), h2z);
+    hangar2.rotation.y = runwayRot + Math.PI;
+    group.add(hangar2);
+
+    // Connector roads in a + pattern from spawn
+    for (const ang of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+      const road = buildRoad(40, 4.5);
+      const rx = playerPos.x + Math.cos(ang) * 30;
+      const rz = playerPos.z + Math.sin(ang) * 30;
+      road.position.set(rx, getHeightAt(rx, rz), rz);
+      road.rotation.y = ang;
+      group.add(road);
+    }
+
+    // 4 guard towers at the perimeter — corner placement
+    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const tower = buildGuardTower();
+      const tx = playerPos.x + dx * 42;
+      const tz = playerPos.z + dz * 42;
+      tower.position.set(tx, getHeightAt(tx, tz), tz);
+      tower.rotation.y = Math.atan2(-dx, -dz);
+      group.add(tower);
+    }
+
+    // 5 bunkers scattered around the base
+    for (let i = 0; i < 5; i++) {
+      addAround(group, buildBunker(), playerPos, 20, 55);
+    }
+
+    // 4 radar dishes (was the only thing here before)
+    for (let i = 0; i < 4; i++) {
+      addAround(group, buildRadarDish(), playerPos, 18, 60);
+    }
+
+    // Sandbag walls around the perimeter — 6 short walls at varied angles
+    for (let i = 0; i < 6; i++) {
+      const ang = (i / 6) * Math.PI * 2 + Math.random() * 0.4;
+      const dist = 28 + Math.random() * 18;
+      const sx = playerPos.x + Math.cos(ang) * dist;
+      const sz = playerPos.z + Math.sin(ang) * dist;
+      const wall = buildSandbagWall(3 + Math.floor(Math.random() * 3));
+      wall.position.set(sx, getHeightAt(sx, sz), sz);
+      wall.rotation.y = ang + Math.PI / 2; // wall faces tangentially
+      group.add(wall);
+    }
   }
   if (level.powerPlant) {
     for (let i = 0; i < 4; i++) addAround(group, buildCoolingTower(), playerPos, 22, 65);

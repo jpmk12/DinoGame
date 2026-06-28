@@ -1926,10 +1926,11 @@ function consumeInCone(origin, fwd, range, coneCos) {
   eat(groundMilitary, (g) => downGroundEnemy(g));
   // Kaiju — Mecha shield deflects beams too
   eat(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
-  // Landmarks fall the same way as buildings — skip ambient water/lava
+  // Landmarks fall the same way as buildings — skip ambient atmosphere
+  // and flat decoration (water/lava/runway/road).
   eat(landmarks, (lm) => {
     const k = lm.userData.kind;
-    if (k === 'water' || k === 'lava') return;
+    if (k === 'water' || k === 'lava' || k === 'runway' || k === 'road') return;
     downLandmark(lm);
   });
 
@@ -2412,10 +2413,10 @@ function consumeAround(origin, range) {
   // Kaiju — Mecha shield blocks AOE; others fall like anything else
   check(kaiju, (k) => { if (!kaijuBlocksAOE(k)) downKaiju(k); });
   // Landmarks (oil rigs, radar dishes, cooling towers, reactors) — but
-  // skip water surfaces and lava pools, which are atmosphere not targets.
+  // skip ambient atmosphere (water/lava) and flat decoration (runway/road).
   check(landmarks, (lm) => {
     const k = lm.userData.kind;
-    if (k === 'water' || k === 'lava') return;
+    if (k === 'water' || k === 'lava' || k === 'runway' || k === 'road') return;
     downLandmark(lm);
   });
   // Plants — critical for herbivore Sweep/Smash to feel responsive
