@@ -7,6 +7,7 @@ import {
   spawnPlantRandom,
   getHeightAt,
   animateClouds,
+  animateMoonSky,
 } from './world.js';
 import {
   buildPlayer,
@@ -25,7 +26,7 @@ import * as save from './save.js';
 import * as haptics from './haptics.js';
 import { updateWater, buildWaterRect } from './water.js';
 import { spawnBoss, updateBoss, damageBoss, BOSS_DATA } from './bosses.js';
-import { ProjectilePool } from './projectiles.js';
+import { ProjectilePool, setProjectileGravity, resetProjectileGravity } from './projectiles.js';
 import { spawnAirEnemies, updateAirEnemies } from './airEnemies.js';
 import { spawnGroundMilitary, updateGroundMilitary } from './groundMilitary.js';
 import { spawnKaiju, updateKaiju, kaijuBlocksAOE } from './kaiju.js';
@@ -311,6 +312,8 @@ let beamLife = 0;
 // Per-ability state used by charge / pounce / frenzy / etc.
 let chargeTimer = 0;
 let pounceTimer = 0;
+let pounceDuration = 0.45; // base duration; firePounce/Swoop set it per-cast
+let pounceArc = 0;         // vertical arc apex — 0 on Earth, positive on moon
 let pounceStart = new THREE.Vector3();
 let pounceEnd = new THREE.Vector3();
 let frenzyTimer = 0;
@@ -502,6 +505,9 @@ function startGame(species) {
   homeNest = buildHomeNest(scene);
   homeRegenAccum = 0;
   if (!projectiles) projectiles = new ProjectilePool(scene);
+  // Low-G levels (moon) get gentler projectile arcs so missiles loft visibly.
+  if (getLevel().lowGravity) setProjectileGravity(3.0);
+  else resetProjectileGravity();
   airEnemies = spawnAirEnemies(scene, player.position, getAirEnemyCounts(selectedLevelKey));
   groundMilitary = spawnGroundMilitary(scene, player.position, getGroundMilitaryCounts(selectedLevelKey));
   kaiju = spawnKaiju(scene, player.position, getKaijuCounts(selectedLevelKey));
@@ -1181,6 +1187,7 @@ function frame() {
 
   // Drift the clouds across the sky
   if (clouds) animateClouds(clouds, dt);
+  if (getLevel().moon) animateMoonSky(scene, dt);
 
   updateWater(rawDt);
   pumpMixers(dt);
@@ -1580,6 +1587,10 @@ function getAirEnemyCounts(levelKey) {
       return { heli: 2, jet: 1, drone: 2 };
     case 'lavaThrone':
       return { heli: 0, jet: 0, drone: 0 };
+    case 'moon':
+      // Drones become "probe satellites" floating overhead. No helis/jets
+      // (no air to fly through), but a fleet of probes feels right.
+      return { heli: 0, jet: 0, drone: 5 };
     case 'dinoPark':
       return { heli: 1, jet: 0, drone: 0 };
     case 'volcano':
@@ -1626,6 +1637,9 @@ function getGroundMilitaryCounts(levelKey) {
       return { tank: 3, silo: 0, soldier: 2 };
     case 'powerPlant':
       return { tank: 1, silo: 2, soldier: 3 };
+    case 'moon':
+      // Astronauts (white-suit variant) scattered around the base
+      return { tank: 0, silo: 0, soldier: 0, astronaut: 6 };
     default:
       return { tank: 0, silo: 0, soldier: 0 };
   }
@@ -2071,7 +2085,8 @@ function fireStompQuake() {
   if (quakeCooldown > 0 || quakeTimer > 0) return;
   audio.stompQuake();
   quakeTimer = QUAKE_DURATION;
-  quakeApex = 4 + player.scale.x * 2.0;
+  const lowG = !!getLevel().lowGravity;
+  quakeApex = (4 + player.scale.x * 2.0) * (lowG ? 2.0 : 1.0);
   quakeCooldown = QUAKE_COOLDOWN;
   haptics.huge();
 }
@@ -2271,9 +2286,12 @@ function firePounce() {
   // off because of the +Z-vs--Z convention flip).
   const yaw = player.rotation.y - (player.userData.faceFlip || 0);
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const lowG = !!getLevel().lowGravity;
   pounceStart.copy(player.position);
-  pounceEnd.copy(player.position).add(fwd.multiplyScalar(12));
-  pounceTimer = 0.45;
+  pounceEnd.copy(player.position).add(fwd.multiplyScalar(lowG ? 18 : 12));
+  pounceTimer = lowG ? 0.85 : 0.45;
+  pounceDuration = pounceTimer;
+  pounceArc = lowG ? 4.5 : 0;
 }
 
 function fireStomp() {
@@ -2364,9 +2382,12 @@ function fireSwoop() {
   haptics.big();
   const yaw = player.rotation.y - (player.userData.faceFlip || 0);
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const lowG = !!getLevel().lowGravity;
   pounceStart.copy(player.position);
-  pounceEnd.copy(player.position).add(fwd.multiplyScalar(18));
-  pounceTimer = 0.55;
+  pounceEnd.copy(player.position).add(fwd.multiplyScalar(lowG ? 26 : 18));
+  pounceTimer = lowG ? 0.95 : 0.55;
+  pounceDuration = pounceTimer;
+  pounceArc = lowG ? 5.5 : 0;
   // Consume along the path as a series of small ranges so anything
   // standing in the corridor gets eaten on the way through.
   const steps = 6;
@@ -2535,10 +2556,15 @@ function updateAbility(dt) {
 
   // Pounce: arc forward and auto-eat on landing
   if (pounceTimer > 0) {
-    const t = 1 - pounceTimer / 0.45;
+    const t = 1 - pounceTimer / pounceDuration;
     pounceTimer = Math.max(0, pounceTimer - dt);
     player.position.x = pounceStart.x + (pounceEnd.x - pounceStart.x) * t;
     player.position.z = pounceStart.z + (pounceEnd.z - pounceStart.z) * t;
+    // On the moon: vertical sine arc rising and falling over the leap
+    if (pounceArc > 0) {
+      const groundY = getHeightAt(player.position.x, player.position.z);
+      player.position.y = groundY + Math.sin(t * Math.PI) * pounceArc;
+    }
     if (pounceTimer === 0) {
       // Landing burst — eat anything close
       consumeAround(player.position, 3.5 * Math.max(1, player.scale.x));

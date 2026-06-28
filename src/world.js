@@ -204,11 +204,137 @@ export function buildWorld(scene) {
     }
   }
 
-  // Sky + clouds
+  // Sky + clouds (no clouds in vacuum)
   const sky = buildSky(scene);
-  const clouds = buildClouds(scene);
+  let clouds = null;
+  if (level.moon) {
+    // Moon level: deep-space backdrop instead of fluffy clouds
+    buildStarField(scene);
+    buildEarth(scene);
+  } else {
+    clouds = buildClouds(scene);
+  }
 
   return { ground, decorations, plants, clouds, sky };
+}
+
+/**
+ * Procedural star field — 1800 points scattered on the upper hemisphere
+ * of a large sphere. Renders as bright pixels that never fade with
+ * distance so they read as stars at any zoom.
+ */
+function buildStarField(scene) {
+  const STAR_COUNT = 1800;
+  const positions = new Float32Array(STAR_COUNT * 3);
+  const colors = new Float32Array(STAR_COUNT * 3);
+  const sizes = new Float32Array(STAR_COUNT);
+  for (let i = 0; i < STAR_COUNT; i++) {
+    const u = Math.random();
+    const v = Math.random();
+    const theta = 2 * Math.PI * u;
+    const phi = Math.acos(2 * v - 1);
+    const r = 400;
+    positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = Math.abs(r * Math.cos(phi)) + 20;
+    positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    // Mostly white, a few warm-tinted or blue
+    const tint = Math.random();
+    if (tint < 0.7) {
+      colors[i * 3] = 1; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 1;
+    } else if (tint < 0.85) {
+      colors[i * 3] = 1; colors[i * 3 + 1] = 0.85; colors[i * 3 + 2] = 0.6;
+    } else {
+      colors[i * 3] = 0.7; colors[i * 3 + 1] = 0.85; colors[i * 3 + 2] = 1;
+    }
+    sizes[i] = 1.2 + Math.random() * 1.8;
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geom.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+  const mat = new THREE.PointsMaterial({
+    vertexColors: true,
+    size: 2,
+    sizeAttenuation: false,
+    transparent: true,
+    depthWrite: false,
+  });
+  const stars = new THREE.Points(geom, mat);
+  stars.renderOrder = -1;
+  scene.add(stars);
+  return stars;
+}
+
+/**
+ * The Earth — a textured sphere hanging high in the sky. Canvas-painted
+ * with ocean, continents, polar caps, and cloud streaks. Slowly spins.
+ */
+function buildEarth(scene) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const ctx = c.getContext('2d');
+  // Ocean
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#0a3a78');
+  grad.addColorStop(0.5, '#1a5a9c');
+  grad.addColorStop(1, '#0a3a78');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 512);
+  // Continents (organic-ish blobs)
+  const continents = [
+    { x: 220, y: 180, r: 130, color: '#3a8a3a' },
+    { x: 250, y: 320, r: 90, color: '#5a7a3a' },
+    { x: 470, y: 200, r: 120, color: '#4a8a3a' },
+    { x: 520, y: 320, r: 75, color: '#5a8a3a' },
+    { x: 720, y: 230, r: 110, color: '#4a8a3a' },
+    { x: 850, y: 340, r: 80, color: '#6a8a4a' },
+    { x: 100, y: 350, r: 60, color: '#5a7a3a' },
+    { x: 920, y: 180, r: 50, color: '#3a8a3a' },
+  ];
+  for (const c0 of continents) {
+    ctx.fillStyle = c0.color;
+    ctx.beginPath();
+    const verts = 14;
+    for (let v = 0; v < verts; v++) {
+      const ang = (v / verts) * Math.PI * 2;
+      const rr = c0.r * (0.65 + Math.random() * 0.55);
+      const px = c0.x + Math.cos(ang) * rr;
+      const py = c0.y + Math.sin(ang) * rr * 0.6;
+      if (v === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Polar caps
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.fillRect(0, 0, 1024, 26);
+  ctx.fillRect(0, 488, 1024, 24);
+  // Cloud streaks (semi-transparent)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * 1024;
+    const y = 30 + Math.random() * 450;
+    const w = 30 + Math.random() * 80;
+    const h = 8 + Math.random() * 14;
+    ctx.beginPath();
+    ctx.ellipse(x, y, w, h, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const earth = new THREE.Mesh(
+    new THREE.SphereGeometry(38, 36, 24),
+    new THREE.MeshLambertMaterial({
+      map: tex,
+      emissive: 0x143360,
+      emissiveIntensity: 0.4,
+    }),
+  );
+  earth.position.set(140, 210, -270);
+  earth.userData.spin = 0.04;
+  earth.userData.isEarth = true;
+  scene.add(earth);
+  return earth;
 }
 
 export function spawnPlantRandom(plantsGroup) {
@@ -316,5 +442,14 @@ export function animateClouds(group, dt) {
   for (const c of group.children) {
     c.position.x += c.userData.drift * dt;
     if (c.position.x > 180) c.position.x = -180;
+  }
+}
+
+// Spin the Earth slowly on its axis if the moon level has one in scene.
+export function animateMoonSky(scene, dt) {
+  for (const o of scene.children) {
+    if (o.userData && o.userData.isEarth) {
+      o.rotation.y += (o.userData.spin || 0.04) * dt;
+    }
   }
 }

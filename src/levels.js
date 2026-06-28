@@ -275,6 +275,35 @@ export const LEVELS = {
     objective: { kind: 'chompVehicles', value: 10, text: 'Crush 10 trucks' },
   },
 
+  moon: {
+    key: 'moon',
+    name: 'Lunar Outpost',
+    desc: 'Stomp the moon base',
+    icon: '🌕',
+    // Grey lunar regolith — any ground visible through landmarks looks
+    // like the actual moon surface.
+    biomeColors: {
+      forest: 0x6e6e72,
+      swamp:  0x5c5c60,
+      desert: 0x82827e,
+    },
+    // Pitch-black space sky. The shader still adds the gradient but at
+    // these dim values it reads as deep space. Stars + Earth come from
+    // separate scene meshes when level.moon is true.
+    sky: { top: 0x000000, mid: 0x04060c, bottom: 0x0e1224, glow: [0.02, 0.02, 0.05] },
+    fog: { color: 0x0a0e1a, density: 0.006 },
+    sun: { color: 0xffffff, intensity: 0.95, pos: [40, 70, 30] }, // hard white sun
+    hemi: { sky: 0x2a3a55, ground: 0x4a4844, intensity: 0.35 },
+    rim: { color: 0x88aaff, intensity: 0.6 }, // cool blue Earthlight rim
+    cloud: { color: 0x000000, emissive: 0 },
+    weather: null,
+    flat: true,
+    moon: true,            // triggers stars + Earth + crater-pock decorations
+    lowGravity: true,      // pounce floats longer, quake leaps higher
+    aquatic: false,
+    objective: { kind: 'topple', value: 8, text: 'Topple 8 moon-base modules' },
+  },
+
   lavaThrone: {
     key: 'lavaThrone',
     name: 'Lava Throne',

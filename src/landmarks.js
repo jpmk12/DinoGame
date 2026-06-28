@@ -775,6 +775,365 @@ export function buildRoad(length = 30, width = 4) {
   return root;
 }
 
+// ---------- Moon: Geodesic Dome Habitat ----------
+export function buildMoonDome() {
+  const root = new THREE.Group();
+  const frame = 0xa0a0aa;
+  const glass = 0x4a8acc;
+  // Foundation pad
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.4, 3.6, 0.35, 16),
+    FLAT(0x5a5a60),
+  );
+  pad.position.y = 0.18;
+  root.add(pad);
+  // Half-sphere dome (lit interior)
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(3.0, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshLambertMaterial({
+      color: glass, emissive: 0x224a8a, emissiveIntensity: 0.6,
+      transparent: true, opacity: 0.85,
+    }),
+  );
+  dome.position.y = 0.35;
+  dome.castShadow = true;
+  root.add(dome);
+  // Geodesic frame ribs (lats + lons)
+  for (let lat = 1; lat <= 3; lat++) {
+    const phi = (lat / 4) * Math.PI / 2;
+    const r = 3.0 * Math.cos(phi);
+    const y = 0.35 + 3.0 * Math.sin(phi);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(r, 0.05, 6, 24),
+      FLAT(frame),
+    );
+    ring.position.y = y;
+    ring.rotation.x = Math.PI / 2;
+    root.add(ring);
+  }
+  for (let lon = 0; lon < 8; lon++) {
+    const ang = (lon / 8) * Math.PI * 2;
+    const meridian = new THREE.Mesh(
+      new THREE.TorusGeometry(3.0, 0.05, 6, 24, Math.PI),
+      FLAT(frame),
+    );
+    meridian.position.y = 0.35;
+    meridian.rotation.y = ang;
+    meridian.rotation.x = Math.PI / 2;
+    root.add(meridian);
+  }
+  // Airlock door
+  const door = box(0.9, 1.1, 0.15, 0xeae8e0);
+  door.position.set(0, 0.75, 3.0);
+  root.add(door);
+  // Door window
+  const window_ = new THREE.Mesh(
+    new THREE.CircleGeometry(0.18, 12),
+    new THREE.MeshBasicMaterial({ color: 0x88e0ff }),
+  );
+  window_.position.set(0, 1.0, 3.085);
+  root.add(window_);
+  // Antenna
+  const ant = box(0.05, 1.4, 0.05, frame);
+  ant.position.set(2.0, 2.6, 0);
+  root.add(ant);
+
+  root.userData.kind = 'building';
+  root.userData.size = 3.5;
+  root.userData.radius = 3.5;
+  root.userData.score = 130;
+  root.userData.subtype = 'moonDome';
+  return root;
+}
+
+// ---------- Moon: Solar Panel Array ----------
+export function buildSolarArray() {
+  const root = new THREE.Group();
+  const post = box(0.18, 1.8, 0.18, 0x6a6a72);
+  post.position.y = 0.9;
+  root.add(post);
+  // Tilted dark blue panel grid (3×3 cells)
+  const panelGroup = new THREE.Group();
+  panelGroup.position.y = 1.75;
+  panelGroup.rotation.x = -0.5;
+  const cellMat = new THREE.MeshLambertMaterial({
+    color: 0x1a2a55, emissive: 0x1a3a8a, emissiveIntensity: 0.5,
+  });
+  const frameMat = new THREE.MeshLambertMaterial({ color: 0xa0a0a8 });
+  // Backing
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.4, 0.05), frameMat);
+  backing.castShadow = true;
+  panelGroup.add(backing);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const cell = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.7, 0.08), cellMat);
+      cell.position.set(-1.05 + c * 1.05, 0.8 - r * 0.8, 0.05);
+      panelGroup.add(cell);
+    }
+  }
+  root.add(panelGroup);
+
+  root.userData.kind = 'building';
+  root.userData.size = 2.0;
+  root.userData.radius = 1.6;
+  root.userData.score = 60;
+  root.userData.subtype = 'solarArray';
+  return root;
+}
+
+// ---------- Moon: Lunar Lander (Apollo-style) ----------
+export function buildLunarLander() {
+  const root = new THREE.Group();
+  const gold = 0xc8a04a;
+  const silver = 0xc0c0c8;
+  const dark = 0x2a2a2e;
+  // Bottom descent stage — octagonal-ish
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.4, 1.6, 0.9, 8),
+    FLAT(gold),
+  );
+  base.position.y = 0.7;
+  base.castShadow = true;
+  root.add(base);
+  // Gold foil texture stripes (alternating dark + gold)
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2;
+    const stripe = box(0.7, 0.85, 0.1, i % 2 ? gold : dark);
+    stripe.position.set(Math.cos(ang) * 1.45, 0.7, Math.sin(ang) * 1.45);
+    stripe.rotation.y = ang + Math.PI / 2;
+    root.add(stripe);
+  }
+  // Upper ascent stage — crew compartment
+  const crew = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.8, 1.0, 1.1, 6),
+    FLAT(silver),
+  );
+  crew.position.y = 1.85;
+  crew.castShadow = true;
+  root.add(crew);
+  // Triangular window
+  const win = box(0.3, 0.18, 0.05, 0x66aaff);
+  win.position.set(0, 1.9, -0.95);
+  root.add(win);
+  // Top hatch
+  const hatch = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.45, 0.45, 0.18, 8),
+    FLAT(silver),
+  );
+  hatch.position.y = 2.5;
+  root.add(hatch);
+  // 4 spider legs
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const leg = box(0.08, 1.6, 0.08, silver);
+    const x = Math.cos(ang) * 1.4;
+    const z = Math.sin(ang) * 1.4;
+    leg.position.set(x, 0.55, z);
+    leg.lookAt(0, 0.7, 0);
+    leg.rotateX(Math.PI / 2);
+    root.add(leg);
+    // Foot pad
+    const foot = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.25, 0.3, 0.1, 8),
+      FLAT(silver),
+    );
+    foot.position.set(x * 1.4, 0.05, z * 1.4);
+    root.add(foot);
+  }
+  // High-gain antenna dish
+  const ant = box(0.05, 0.6, 0.05, silver);
+  ant.position.set(0.7, 2.9, 0);
+  ant.rotation.z = 0.3;
+  root.add(ant);
+  const dish = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+    FLAT(silver),
+  );
+  dish.scale.y = 0.4;
+  dish.position.set(0.85, 3.15, 0);
+  dish.rotation.x = -0.4;
+  root.add(dish);
+
+  root.userData.kind = 'building';
+  root.userData.size = 2.5;
+  root.userData.radius = 2.0;
+  root.userData.score = 200;
+  root.userData.subtype = 'lunarLander';
+  return root;
+}
+
+// ---------- Moon: Rocket on Launchpad ----------
+export function buildMoonRocket() {
+  const root = new THREE.Group();
+  const white = 0xeae6dc;
+  const red = 0xc03830;
+  // Concrete launchpad
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.6, 3.0, 0.4, 12),
+    FLAT(0x5a5a5e),
+  );
+  pad.position.y = 0.2;
+  root.add(pad);
+  // Hold-down clamps (4 columns around)
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2;
+    const clamp = box(0.18, 0.8, 0.18, 0x444448);
+    clamp.position.set(Math.cos(ang) * 1.6, 0.8, Math.sin(ang) * 1.6);
+    root.add(clamp);
+  }
+  // Rocket body — long white cylinder
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.7, 0.85, 8.5, 14),
+    FLAT(white),
+  );
+  body.position.y = 4.65;
+  body.castShadow = true;
+  root.add(body);
+  // Red stripes (decals)
+  for (let i = 0; i < 3; i++) {
+    const stripe = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.71, 0.86, 0.25, 14, 1, true),
+      FLAT(red),
+    );
+    stripe.position.y = 2.5 + i * 2.0;
+    root.add(stripe);
+  }
+  // Nose cone
+  const nose = new THREE.Mesh(
+    new THREE.ConeGeometry(0.7, 1.6, 14),
+    FLAT(white),
+  );
+  nose.position.y = 9.7;
+  nose.castShadow = true;
+  root.add(nose);
+  // Fins at base
+  for (let i = 0; i < 3; i++) {
+    const ang = (i / 3) * Math.PI * 2;
+    const fin = box(0.08, 1.4, 0.9, red);
+    fin.position.set(Math.cos(ang) * 0.85, 1.1, Math.sin(ang) * 0.85);
+    fin.rotation.y = ang + Math.PI / 2;
+    root.add(fin);
+  }
+  // Gantry tower beside it
+  const gantry = new THREE.Group();
+  const gantryX = -3.0;
+  for (let leg of [0, 1]) {
+    for (let side of [-1, 1]) {
+      const pole = box(0.12, 9, 0.12, 0x707074);
+      pole.position.set(gantryX + leg * 0.8, 4.6, side * 0.6);
+      gantry.add(pole);
+    }
+  }
+  for (let y of [1.5, 3.5, 5.5, 7.5]) {
+    const rail = box(1.2, 0.08, 1.4, 0x707074);
+    rail.position.set(gantryX + 0.4, y, 0);
+    gantry.add(rail);
+  }
+  // Access arm bridging gantry to rocket
+  const arm = box(2.3, 0.12, 0.35, 0x9a3a3a);
+  arm.position.set(-1.4, 6.5, 0);
+  gantry.add(arm);
+  root.add(gantry);
+
+  root.userData.kind = 'building';
+  root.userData.size = 4.0;
+  root.userData.radius = 4.0;
+  root.userData.score = 300;     // biggest moon target
+  root.userData.subtype = 'rocket';
+  return root;
+}
+
+// ---------- Moon: Communications Dish (huge satellite) ----------
+export function buildMoonCommsDish() {
+  const root = new THREE.Group();
+  const white = 0xeae6dc;
+  const grey = 0x9a9aa0;
+  // Tripod base
+  for (let i = 0; i < 3; i++) {
+    const ang = (i / 3) * Math.PI * 2;
+    const leg = box(0.16, 3.0, 0.16, grey);
+    leg.position.set(Math.cos(ang) * 0.8, 1.5, Math.sin(ang) * 0.8);
+    leg.lookAt(0, 3.0, 0);
+    leg.rotateX(Math.PI / 2);
+    root.add(leg);
+  }
+  // Mount platform
+  const mount = box(1.4, 0.3, 1.4, grey);
+  mount.position.y = 3.0;
+  root.add(mount);
+  // Large parabolic dish (half sphere, flattened)
+  const dish = new THREE.Mesh(
+    new THREE.SphereGeometry(2.6, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshLambertMaterial({ color: white, side: THREE.DoubleSide }),
+  );
+  dish.scale.y = 0.45;
+  dish.position.set(0, 4.0, 0);
+  dish.rotation.x = -0.5;
+  root.add(dish);
+  // Receiver pole sticking out front
+  const pole = box(0.1, 2.6, 0.1, grey);
+  pole.position.set(0, 4.6, -1.0);
+  pole.rotation.x = -0.9;
+  root.add(pole);
+  // Hub at receiver tip
+  const hub = box(0.4, 0.4, 0.4, 0x444448);
+  hub.position.set(0, 5.4, -1.7);
+  root.add(hub);
+
+  root.userData.kind = 'building';
+  root.userData.size = 3.0;
+  root.userData.radius = 2.8;
+  root.userData.score = 150;
+  root.userData.subtype = 'moonComms';
+  root.userData.dish = dish;
+  return root;
+}
+
+// ---------- Moon: Storage Tank (sci-fi fuel cylinder) ----------
+export function buildMoonTank() {
+  const root = new THREE.Group();
+  // Wide cylinder lying on its side
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.0, 1.0, 4.0, 16),
+    FLAT(0xeae6dc),
+  );
+  body.rotation.z = Math.PI / 2;
+  body.position.y = 1.0;
+  body.castShadow = true;
+  root.add(body);
+  // End caps
+  for (const xx of [-2.0, 2.0]) {
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(1.0, 16, 10),
+      FLAT(0xc8c2b4),
+    );
+    cap.position.set(xx, 1.0, 0);
+    cap.scale.x = 0.35;
+    root.add(cap);
+  }
+  // Red NASA-style stripe
+  const stripe = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.01, 1.01, 0.5, 16, 1, true),
+    FLAT(0xc03830),
+  );
+  stripe.rotation.z = Math.PI / 2;
+  stripe.position.y = 1.0;
+  root.add(stripe);
+  // Cradle supports
+  for (const xx of [-1.5, 1.5]) {
+    const cradle = box(0.3, 0.8, 1.6, 0x6a6a70);
+    cradle.position.set(xx, 0.4, 0);
+    root.add(cradle);
+  }
+
+  root.userData.kind = 'building';
+  root.userData.size = 2.5;
+  root.userData.radius = 2.5;
+  root.userData.score = 90;
+  root.userData.subtype = 'moonTank';
+  return root;
+}
+
 // ---------- Lava Throne: Lava Pool (hazard + visual) ----------
 export function buildLavaPool() {
   const root = new THREE.Group();
@@ -973,6 +1332,41 @@ export function spawnLandmarks(scene, level, playerPos) {
     for (let i = 0; i < 5; i++) {
       const v = variants[i % variants.length];
       addAround(group, buildMegaTower(v), playerPos, 35, 80);
+    }
+  }
+  if (level.moon) {
+    // Anchor — Apollo-style lunar lander right next to spawn so the
+    // first thing the kid sees is iconic moon-mission gear.
+    const landerAng = Math.random() * Math.PI * 2;
+    const landerDist = 14;
+    const lander = buildLunarLander();
+    lander.position.set(
+      playerPos.x + Math.cos(landerAng) * landerDist,
+      getHeightAt(playerPos.x + Math.cos(landerAng) * landerDist,
+                  playerPos.z + Math.sin(landerAng) * landerDist),
+      playerPos.z + Math.sin(landerAng) * landerDist,
+    );
+    lander.rotation.y = -landerAng;
+    group.add(lander);
+    // 3 dome habitats spread around the player
+    for (let i = 0; i < 3; i++) {
+      addAround(group, buildMoonDome(), playerPos, 22, 55);
+    }
+    // 4 solar arrays
+    for (let i = 0; i < 4; i++) {
+      addAround(group, buildSolarArray(), playerPos, 18, 50);
+    }
+    // 2 rockets on launchpads — the marquee target (300 score each)
+    for (let i = 0; i < 2; i++) {
+      addAround(group, buildMoonRocket(), playerPos, 30, 65);
+    }
+    // 2 comms dishes pointed at Earth
+    for (let i = 0; i < 2; i++) {
+      addAround(group, buildMoonCommsDish(), playerPos, 25, 60);
+    }
+    // 3 fuel/storage tanks scattered
+    for (let i = 0; i < 3; i++) {
+      addAround(group, buildMoonTank(), playerPos, 18, 50);
     }
   }
 

@@ -199,18 +199,99 @@ export function buildSoldier() {
   return root;
 }
 
+// ---------- D3b. Astronaut (moon-themed soldier reskin) ----------
+export function buildAstronaut() {
+  const root = new THREE.Group();
+  const suit = 0xe8e8ec;
+  const visor = 0xfff0a0;
+  const dark = 0x111111;
+  // Torso
+  const torso = box(0.36, 0.5, 0.26, suit);
+  torso.position.y = 0.85;
+  root.add(torso);
+  // Backpack life support
+  const pack = box(0.32, 0.45, 0.18, 0xb0b0b8);
+  pack.position.set(0, 0.85, 0.22);
+  root.add(pack);
+  // Helmet — sphere with gold visor stripe
+  const helm = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 12, 10),
+    FLAT(suit),
+  );
+  helm.position.y = 1.28;
+  root.add(helm);
+  // Gold visor (flat front strip)
+  const vis = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 12, 6, 0, Math.PI * 2, Math.PI * 0.32, Math.PI * 0.32),
+    new THREE.MeshLambertMaterial({
+      color: visor, emissive: 0xc8a050, emissiveIntensity: 0.4,
+    }),
+  );
+  vis.position.y = 1.28;
+  vis.rotation.y = Math.PI;
+  root.add(vis);
+  // Arms
+  for (const side of [-1, 1]) {
+    const arm = box(0.11, 0.42, 0.11, suit);
+    arm.position.set(side * 0.24, 0.82, 0);
+    root.add(arm);
+    // Glove
+    const glove = box(0.13, 0.13, 0.13, dark);
+    glove.position.set(side * 0.24, 0.6, 0);
+    root.add(glove);
+  }
+  // Legs (animated)
+  const legL = new THREE.Group();
+  legL.position.set(-0.1, 0.55, 0);
+  const legLMesh = box(0.14, 0.55, 0.14, suit);
+  legLMesh.position.y = -0.25;
+  legL.add(legLMesh);
+  const bootL = box(0.18, 0.12, 0.22, 0x9a9aa0);
+  bootL.position.y = -0.55;
+  legL.add(bootL);
+  root.add(legL);
+  const legR = new THREE.Group();
+  legR.position.set(0.1, 0.55, 0);
+  const legRMesh = box(0.14, 0.55, 0.14, suit);
+  legRMesh.position.y = -0.25;
+  legR.add(legRMesh);
+  const bootR = box(0.18, 0.12, 0.22, 0x9a9aa0);
+  bootR.position.y = -0.55;
+  legR.add(bootR);
+  root.add(legR);
+  // Antenna on helmet
+  const ant = box(0.03, 0.18, 0.03, dark);
+  ant.position.set(0, 1.5, 0);
+  root.add(ant);
+
+  root.userData.kind = 'ground';
+  root.userData.groundType = 'soldier'; // reuse soldier update logic
+  root.userData.legL = legL;
+  root.userData.legR = legR;
+  root.userData.size = 0.6;
+  root.userData.score = 18;
+  root.userData.nutrition = 3;
+  root.userData.atomicCharge = 4;
+  root.userData.speed = 4.5; // slower than soldiers — they bounce-flee
+  root.userData.walkPhase = Math.random() * Math.PI * 2;
+  root.userData.wanderDir = new THREE.Vector3();
+  return root;
+}
+
 // ---------- Spawning ----------
 
 export function spawnGroundMilitary(scene, playerPos, counts = {}) {
   const group = new THREE.Group();
   group.userData.kind = 'groundMilitary';
-  const nTank    = counts.tank    ?? 0;
-  const nSilo    = counts.silo    ?? 0;
-  const nSoldier = counts.soldier ?? 0;
+  const nTank      = counts.tank      ?? 0;
+  const nSilo      = counts.silo      ?? 0;
+  const nSoldier   = counts.soldier   ?? 0;
+  const nAstronaut = counts.astronaut ?? 0;
 
   for (let i = 0; i < nTank; i++) addAround(group, buildTank(), playerPos, 18, 40);
   for (let i = 0; i < nSilo; i++) addAround(group, buildMissileSilo(), playerPos, 22, 50);
   for (let i = 0; i < nSoldier; i++) addAround(group, buildSoldier(), playerPos, 10, 26);
+  for (let i = 0; i < nAstronaut; i++) addAround(group, buildAstronaut(), playerPos, 12, 30);
 
   scene.add(group);
   return group;

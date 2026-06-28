@@ -10,7 +10,11 @@ import * as THREE from 'three';
 // or when they pass below ground level.
 
 const POOL_SIZE = 32;
-const GRAVITY = 7.5; // gentle so missiles arc visibly without being instant
+const DEFAULT_GRAVITY = 7.5; // gentle so missiles arc visibly without being instant
+let GRAVITY = DEFAULT_GRAVITY;
+
+export function setProjectileGravity(g) { GRAVITY = g; }
+export function resetProjectileGravity() { GRAVITY = DEFAULT_GRAVITY; }
 
 const PROJECTILE_COLORS = {
   missile:  { core: 0xff5a3a, glow: 0xffb088, trail: 0xff6a4a },

@@ -40,6 +40,7 @@ Eat plants, mushrooms, fruit, critters, eggs, watermelons — anything smaller t
 | 🌙 Night Forest | Moonlight, fireflies | Hatch 3 babies |
 | 🏙️ City Rampage | Destructible buildings, driving cars | Topple 20 buildings |
 | 🌃 Night City | Same as above at midnight, glowing windows | Topple 30 buildings |
+| 🌕 Lunar Outpost | Moon base with Earth in the sky, low gravity, stars | Topple 8 moon-base modules |
 
 Each level has a **boss** that appears after a 45-second grace period — name, healthbar, and beacon visible from across the map. Defeat for bonus score and achievements.
 
