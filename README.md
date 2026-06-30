@@ -1,5 +1,7 @@
 # DinoGrow
 
+![DinoGrow banner — a glowing-plated Titan blasting a helicopter with a plasma beam over a night megacity, with Earth rising in the sky](banner.svg)
+
 A 3D dinosaur growth game for kids. Pure HTML/CSS/JS + [Three.js](https://threejs.org/), no build step. Designed for ages 6–8 to play on an iPhone via the browser, but works on any modern device with a touch screen or keyboard.
 
 ## How to play

@@ -1,0 +1,419 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- Sky gradient: dusk → deep blue → midnight -->
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#0a0e26"/>
+      <stop offset="40%" stop-color="#1a2a5a"/>
+      <stop offset="75%" stop-color="#7a3a55"/>
+      <stop offset="100%" stop-color="#ff8a3a"/>
+    </linearGradient>
+    <!-- Plasma beam gradient -->
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="35%" stop-color="#9fe4ff" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#3a8aff" stop-opacity="0.0"/>
+    </linearGradient>
+    <radialGradient id="muzzleFlash" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="1.0"/>
+      <stop offset="40%" stop-color="#9fe4ff" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#3a8aff" stop-opacity="0.0"/>
+    </radialGradient>
+    <radialGradient id="explosion" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="1.0"/>
+      <stop offset="30%" stop-color="#ffd24a" stop-opacity="0.95"/>
+      <stop offset="60%" stop-color="#ff5a2a" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#7a0a0a" stop-opacity="0.0"/>
+    </radialGradient>
+    <radialGradient id="plateGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="1.0"/>
+      <stop offset="50%" stop-color="#9fe4ff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#3a8aff" stop-opacity="0.0"/>
+    </radialGradient>
+    <radialGradient id="earth" cx="35%" cy="35%" r="65%">
+      <stop offset="0%"  stop-color="#9fc8ff"/>
+      <stop offset="60%" stop-color="#1a5a9c"/>
+      <stop offset="100%" stop-color="#0a2a5c"/>
+    </radialGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="bigGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <!-- Sky -->
+  <rect width="1600" height="800" fill="url(#sky)"/>
+
+  <!-- Stars -->
+  <g fill="#ffffff">
+    <circle cx="120"  cy="80"  r="1.8" opacity="0.9"/>
+    <circle cx="260"  cy="50"  r="1.2" opacity="0.7"/>
+    <circle cx="380"  cy="120" r="2.0" opacity="0.95"/>
+    <circle cx="540"  cy="60"  r="1.5" opacity="0.85"/>
+    <circle cx="700"  cy="100" r="1.0" opacity="0.7"/>
+    <circle cx="820"  cy="40"  r="1.8" opacity="0.9"/>
+    <circle cx="980"  cy="90"  r="1.3" opacity="0.8"/>
+    <circle cx="1120" cy="60"  r="2.2" opacity="1.0"/>
+    <circle cx="1260" cy="30"  r="1.4" opacity="0.85"/>
+    <circle cx="1420" cy="120" r="1.7" opacity="0.9"/>
+    <circle cx="1530" cy="200" r="1.2" opacity="0.7"/>
+    <circle cx="60"   cy="180" r="1.0" opacity="0.65"/>
+    <circle cx="200"  cy="220" r="1.5" opacity="0.85"/>
+    <circle cx="450"  cy="170" r="1.1" opacity="0.7"/>
+    <circle cx="640"  cy="200" r="1.3" opacity="0.8"/>
+    <circle cx="880"  cy="160" r="1.0" opacity="0.65"/>
+    <circle cx="1050" cy="240" r="1.5" opacity="0.85"/>
+    <circle cx="1330" cy="180" r="1.8" opacity="0.95"/>
+  </g>
+
+  <!-- Earth in upper right -->
+  <g transform="translate(1340, 130)">
+    <circle r="78" fill="url(#earth)" filter="url(#softGlow)"/>
+    <!-- continent blobs -->
+    <ellipse cx="-20" cy="-15" rx="22" ry="12" fill="#3a8a3a" opacity="0.85" transform="rotate(-12)"/>
+    <ellipse cx="18"  cy="-5"  rx="14" ry="20" fill="#4a8a3a" opacity="0.85"/>
+    <ellipse cx="0"   cy="25"  rx="28" ry="9"  fill="#3a7a3a" opacity="0.85"/>
+    <ellipse cx="35"  cy="22"  rx="10" ry="6"  fill="#5a8a4a" opacity="0.85"/>
+    <!-- cloud streaks -->
+    <ellipse cx="-30" cy="20"  rx="35" ry="4" fill="#ffffff" opacity="0.35"/>
+    <ellipse cx="22"  cy="-25" rx="28" ry="3" fill="#ffffff" opacity="0.35"/>
+    <ellipse cx="10"  cy="40"  rx="22" ry="3" fill="#ffffff" opacity="0.3"/>
+    <!-- polar cap -->
+    <ellipse cx="0" cy="-72" rx="60" ry="6" fill="#ffffff" opacity="0.6"/>
+  </g>
+
+  <!-- Distant skyline silhouette -->
+  <g fill="#1a1a2e" opacity="0.85">
+    <rect x="80"  y="430" width="40" height="170"/>
+    <rect x="130" y="460" width="55" height="140"/>
+    <rect x="195" y="400" width="45" height="200"/>
+    <rect x="250" y="440" width="60" height="160"/>
+    <rect x="320" y="380" width="50" height="220"/>
+    <rect x="380" y="420" width="70" height="180"/>
+    <rect x="460" y="350" width="55" height="250"/>
+    <rect x="525" y="410" width="45" height="190"/>
+    <rect x="580" y="370" width="65" height="230"/>
+    <rect x="650" y="430" width="40" height="170"/>
+    <rect x="700" y="390" width="50" height="210"/>
+    <rect x="1340" y="430" width="50" height="170"/>
+    <rect x="1395" y="380" width="65" height="220"/>
+    <rect x="1465" y="410" width="55" height="190"/>
+    <rect x="1525" y="370" width="60" height="230"/>
+  </g>
+
+  <!-- Mid skyline (closer, with lit windows) -->
+  <g>
+    <!-- Tall megatower with spire -->
+    <rect x="900"  y="240" width="80"  height="360" fill="#2a2a3e"/>
+    <rect x="900"  y="430" width="80"  height="170" fill="#252535"/>
+    <polygon points="940,240 980,240 940,180" fill="#3a3a4e"/>
+    <rect x="935"  y="160" width="10"  height="22" fill="#6a6a7e"/>
+    <circle cx="940" cy="156" r="6" fill="#ff5a3a"/>
+    <!-- windows on megatower -->
+    <g fill="#ffe9a8">
+      <rect x="910" y="260" width="6" height="8"/>
+      <rect x="922" y="260" width="6" height="8"/>
+      <rect x="946" y="260" width="6" height="8"/>
+      <rect x="958" y="260" width="6" height="8"/>
+      <rect x="970" y="260" width="6" height="8"/>
+      <rect x="910" y="280" width="6" height="8"/>
+      <rect x="934" y="280" width="6" height="8"/>
+      <rect x="958" y="280" width="6" height="8"/>
+      <rect x="970" y="280" width="6" height="8"/>
+      <rect x="910" y="300" width="6" height="8"/>
+      <rect x="922" y="300" width="6" height="8"/>
+      <rect x="946" y="300" width="6" height="8"/>
+      <rect x="970" y="300" width="6" height="8"/>
+      <rect x="922" y="320" width="6" height="8"/>
+      <rect x="934" y="320" width="6" height="8"/>
+      <rect x="958" y="320" width="6" height="8"/>
+      <rect x="970" y="320" width="6" height="8"/>
+      <rect x="910" y="340" width="6" height="8"/>
+      <rect x="946" y="340" width="6" height="8"/>
+      <rect x="958" y="340" width="6" height="8"/>
+      <rect x="922" y="360" width="6" height="8"/>
+      <rect x="946" y="360" width="6" height="8"/>
+      <rect x="970" y="360" width="6" height="8"/>
+      <rect x="910" y="380" width="6" height="8"/>
+      <rect x="934" y="380" width="6" height="8"/>
+      <rect x="958" y="380" width="6" height="8"/>
+      <rect x="910" y="400" width="6" height="8"/>
+      <rect x="934" y="400" width="6" height="8"/>
+      <rect x="970" y="400" width="6" height="8"/>
+      <rect x="922" y="450" width="6" height="8"/>
+      <rect x="946" y="450" width="6" height="8"/>
+      <rect x="970" y="450" width="6" height="8"/>
+      <rect x="910" y="475" width="6" height="8"/>
+      <rect x="934" y="475" width="6" height="8"/>
+      <rect x="958" y="475" width="6" height="8"/>
+      <rect x="910" y="500" width="6" height="8"/>
+      <rect x="922" y="500" width="6" height="8"/>
+      <rect x="946" y="500" width="6" height="8"/>
+      <rect x="970" y="500" width="6" height="8"/>
+      <rect x="922" y="525" width="6" height="8"/>
+      <rect x="946" y="525" width="6" height="8"/>
+      <rect x="970" y="525" width="6" height="8"/>
+    </g>
+    <!-- Other mid buildings -->
+    <rect x="785"  y="380" width="95"  height="220" fill="#252535"/>
+    <rect x="990"  y="330" width="70"  height="270" fill="#2c2c40"/>
+    <rect x="1070" y="370" width="85"  height="230" fill="#222232"/>
+    <rect x="1165" y="340" width="60"  height="260" fill="#28283c"/>
+    <rect x="1230" y="300" width="80"  height="300" fill="#2a2a3e"/>
+    <g fill="#ffd29a">
+      <rect x="800" y="400" width="5" height="7"/>
+      <rect x="812" y="400" width="5" height="7"/>
+      <rect x="836" y="400" width="5" height="7"/>
+      <rect x="860" y="400" width="5" height="7"/>
+      <rect x="800" y="420" width="5" height="7"/>
+      <rect x="824" y="420" width="5" height="7"/>
+      <rect x="848" y="420" width="5" height="7"/>
+      <rect x="812" y="440" width="5" height="7"/>
+      <rect x="836" y="440" width="5" height="7"/>
+      <rect x="860" y="440" width="5" height="7"/>
+      <rect x="800" y="460" width="5" height="7"/>
+      <rect x="824" y="460" width="5" height="7"/>
+      <rect x="860" y="460" width="5" height="7"/>
+      <rect x="812" y="480" width="5" height="7"/>
+      <rect x="836" y="480" width="5" height="7"/>
+      <rect x="848" y="480" width="5" height="7"/>
+      <rect x="824" y="500" width="5" height="7"/>
+      <rect x="860" y="500" width="5" height="7"/>
+      <rect x="800" y="520" width="5" height="7"/>
+      <rect x="836" y="520" width="5" height="7"/>
+      <rect x="848" y="520" width="5" height="7"/>
+    </g>
+    <g fill="#bfe6ff">
+      <rect x="1000" y="350" width="5" height="7"/>
+      <rect x="1014" y="350" width="5" height="7"/>
+      <rect x="1038" y="350" width="5" height="7"/>
+      <rect x="1050" y="350" width="5" height="7"/>
+      <rect x="1014" y="370" width="5" height="7"/>
+      <rect x="1026" y="370" width="5" height="7"/>
+      <rect x="1050" y="370" width="5" height="7"/>
+      <rect x="1000" y="390" width="5" height="7"/>
+      <rect x="1038" y="390" width="5" height="7"/>
+      <rect x="1014" y="410" width="5" height="7"/>
+      <rect x="1038" y="410" width="5" height="7"/>
+      <rect x="1050" y="410" width="5" height="7"/>
+      <rect x="1000" y="430" width="5" height="7"/>
+      <rect x="1026" y="430" width="5" height="7"/>
+      <rect x="1014" y="450" width="5" height="7"/>
+      <rect x="1038" y="450" width="5" height="7"/>
+      <rect x="1050" y="450" width="5" height="7"/>
+      <rect x="1000" y="470" width="5" height="7"/>
+      <rect x="1026" y="470" width="5" height="7"/>
+      <rect x="1050" y="470" width="5" height="7"/>
+      <rect x="1014" y="490" width="5" height="7"/>
+      <rect x="1038" y="490" width="5" height="7"/>
+      <rect x="1014" y="510" width="5" height="7"/>
+      <rect x="1026" y="510" width="5" height="7"/>
+      <rect x="1050" y="510" width="5" height="7"/>
+      <rect x="1000" y="530" width="5" height="7"/>
+      <rect x="1014" y="530" width="5" height="7"/>
+      <rect x="1038" y="530" width="5" height="7"/>
+    </g>
+  </g>
+
+  <!-- Falling building (rotated, mid-toppling) -->
+  <g transform="translate(740, 600) rotate(-32) translate(-30, -250)">
+    <rect x="0" y="0" width="60" height="270" fill="#2a2a3e"/>
+    <g fill="#ffe9a8">
+      <rect x="8"  y="20" width="5" height="7"/>
+      <rect x="22" y="20" width="5" height="7"/>
+      <rect x="40" y="20" width="5" height="7"/>
+      <rect x="8"  y="40" width="5" height="7"/>
+      <rect x="30" y="40" width="5" height="7"/>
+      <rect x="22" y="60" width="5" height="7"/>
+      <rect x="40" y="60" width="5" height="7"/>
+      <rect x="8"  y="80" width="5" height="7"/>
+      <rect x="22" y="80" width="5" height="7"/>
+      <rect x="40" y="80" width="5" height="7"/>
+      <rect x="30" y="100" width="5" height="7"/>
+      <rect x="40" y="100" width="5" height="7"/>
+      <rect x="8"  y="120" width="5" height="7"/>
+      <rect x="22" y="120" width="5" height="7"/>
+      <rect x="40" y="140" width="5" height="7"/>
+      <rect x="8"  y="160" width="5" height="7"/>
+      <rect x="30" y="160" width="5" height="7"/>
+      <rect x="22" y="180" width="5" height="7"/>
+      <rect x="40" y="180" width="5" height="7"/>
+      <rect x="8"  y="200" width="5" height="7"/>
+      <rect x="22" y="220" width="5" height="7"/>
+      <rect x="40" y="220" width="5" height="7"/>
+      <rect x="30" y="240" width="5" height="7"/>
+    </g>
+    <!-- Dust cloud at the base -->
+    <ellipse cx="30" cy="270" rx="80" ry="22" fill="#a4988a" opacity="0.7"/>
+    <ellipse cx="15" cy="278" rx="50" ry="14" fill="#c4b8aa" opacity="0.6"/>
+  </g>
+
+  <!-- Helicopter being blasted -->
+  <g transform="translate(1150, 220) rotate(-15)">
+    <!-- Body -->
+    <ellipse cx="0" cy="0" rx="32" ry="12" fill="#3a3a44"/>
+    <!-- Tail boom -->
+    <rect x="20" y="-3" width="55" height="6" fill="#2a2a34"/>
+    <!-- Tail fin -->
+    <polygon points="72,-3 78,-14 75,3" fill="#1a1a24"/>
+    <!-- Rotor blur (motion lines) -->
+    <ellipse cx="-2" cy="-14" rx="48" ry="3" fill="#777" opacity="0.5"/>
+    <ellipse cx="-2" cy="-14" rx="32" ry="2" fill="#777" opacity="0.6"/>
+    <!-- Skids -->
+    <line x1="-22" y1="14" x2="22" y2="14" stroke="#222" stroke-width="2"/>
+    <line x1="-18" y1="9" x2="-18" y2="14" stroke="#222" stroke-width="2"/>
+    <line x1="18" y1="9" x2="18" y2="14" stroke="#222" stroke-width="2"/>
+    <!-- Cockpit -->
+    <ellipse cx="-22" cy="-1" rx="9" ry="7" fill="#2a3a55"/>
+  </g>
+
+  <!-- Explosion behind helicopter -->
+  <g transform="translate(1100, 215)">
+    <circle r="70" fill="url(#explosion)" filter="url(#softGlow)"/>
+    <circle r="35" fill="#ffd24a" opacity="0.85"/>
+    <!-- Debris streaks -->
+    <line x1="-50" y1="-30" x2="-90" y2="-55" stroke="#ff7a3a" stroke-width="3" stroke-linecap="round"/>
+    <line x1="40"  y1="-40" x2="80"  y2="-65" stroke="#ff7a3a" stroke-width="3" stroke-linecap="round"/>
+    <line x1="-60" y1="20"  x2="-100" y2="50" stroke="#ffd24a" stroke-width="2" stroke-linecap="round"/>
+    <line x1="50"  y1="40"  x2="100" y2="65"  stroke="#ffd24a" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Plasma beam from Titan's mouth to the explosion -->
+  <g>
+    <!-- Wide outer glow -->
+    <path d="M 420 330 Q 750 280 1080 215 L 1080 245 Q 750 320 420 380 Z"
+          fill="url(#beam)" filter="url(#softGlow)" opacity="0.7"/>
+    <!-- Inner hot core -->
+    <path d="M 420 345 Q 750 305 1080 220 L 1080 235 Q 750 312 420 365 Z"
+          fill="#ffffff" opacity="0.9" filter="url(#softGlow)"/>
+    <!-- Muzzle flash -->
+    <circle cx="420" cy="355" r="55" fill="url(#muzzleFlash)" filter="url(#softGlow)"/>
+  </g>
+
+  <!-- Ground / street -->
+  <g>
+    <rect y="640" width="1600" height="160" fill="#1a1f2a"/>
+    <!-- Street paint marks -->
+    <rect x="80"   y="700" width="50" height="8" fill="#ffd24a" opacity="0.6"/>
+    <rect x="200"  y="705" width="50" height="8" fill="#ffd24a" opacity="0.55"/>
+    <rect x="320"  y="710" width="50" height="8" fill="#ffd24a" opacity="0.5"/>
+    <rect x="440"  y="715" width="50" height="8" fill="#ffd24a" opacity="0.45"/>
+    <rect x="1180" y="690" width="50" height="8" fill="#ffd24a" opacity="0.6"/>
+    <rect x="1290" y="695" width="50" height="8" fill="#ffd24a" opacity="0.55"/>
+    <rect x="1400" y="700" width="50" height="8" fill="#ffd24a" opacity="0.5"/>
+    <rect x="1510" y="705" width="50" height="8" fill="#ffd24a" opacity="0.45"/>
+    <!-- Cracked debris near falling building -->
+    <polygon points="650,640 690,650 670,645" fill="#3a3a48"/>
+    <polygon points="710,648 750,656 720,655" fill="#2a2a34"/>
+    <polygon points="800,650 830,660 810,656" fill="#3a3a48"/>
+  </g>
+
+  <!-- TITAN (giant blocky biped) in the foreground left -->
+  <g transform="translate(260, 380)">
+    <!-- Tail (3 tapering segments going right) -->
+    <g>
+      <rect x="20"  y="120" width="100" height="40" fill="#36443e" transform="rotate(8 70 140)"/>
+      <rect x="100" y="135" width="80"  height="32" fill="#2a3530" transform="rotate(14 140 151)"/>
+      <rect x="170" y="155" width="55"  height="22" fill="#1f2a25" transform="rotate(20 197 166)"/>
+    </g>
+
+    <!-- Legs -->
+    <rect x="-25" y="170" width="38" height="100" fill="#2a3530"/>
+    <rect x="20"  y="172" width="38" height="98"  fill="#36443e"/>
+    <rect x="-32" y="265" width="55" height="14"  fill="#1a2520"/>
+    <rect x="15"  y="266" width="55" height="14"  fill="#1a2520"/>
+    <!-- Toe claws -->
+    <polygon points="-32,272 -38,290 -22,275" fill="#0e1a14"/>
+    <polygon points="-12,272 -18,290 -2,275"  fill="#0e1a14"/>
+    <polygon points="20,272 14,290 30,275"    fill="#0e1a14"/>
+    <polygon points="42,272 36,290 52,275"    fill="#0e1a14"/>
+
+    <!-- Hips/torso -->
+    <rect x="-30" y="100" width="100" height="80" fill="#36443e"/>
+    <!-- Chest -->
+    <rect x="-25" y="60"  width="85" height="60" fill="#3a4a44"/>
+    <rect x="-22" y="58"  width="80" height="14" fill="#1a2520" opacity="0.4"/>
+
+    <!-- Neck -->
+    <rect x="-10" y="20" width="50" height="50" fill="#3a4a44"/>
+
+    <!-- Head -->
+    <g transform="translate(-12, -32)">
+      <rect x="0" y="0" width="100" height="60" fill="#3a4a44"/>
+      <!-- Snout -->
+      <rect x="-8" y="20" width="40" height="32" fill="#36443e"/>
+      <!-- Jaw / lower -->
+      <rect x="-10" y="42" width="50" height="14" fill="#1a2520"/>
+      <!-- Teeth -->
+      <polygon points="-6,42 -2,55 3,42"  fill="#fff8dc"/>
+      <polygon points="6,42 10,55 14,42"  fill="#fff8dc"/>
+      <polygon points="20,42 24,55 28,42" fill="#fff8dc"/>
+      <!-- Glowing eyes -->
+      <circle cx="62"  cy="20" r="6" fill="#ffeb6a" filter="url(#softGlow)"/>
+      <circle cx="80"  cy="20" r="6" fill="#ffeb6a" filter="url(#softGlow)"/>
+      <circle cx="62"  cy="20" r="3" fill="#ff8a3a"/>
+      <circle cx="80"  cy="20" r="3" fill="#ff8a3a"/>
+      <!-- Brow ridges -->
+      <rect x="55" y="11" width="15" height="3" fill="#1a2520"/>
+      <rect x="75" y="11" width="15" height="3" fill="#1a2520"/>
+    </g>
+
+    <!-- Tiny arms with claws -->
+    <rect x="-32" y="80" width="14" height="40" fill="#36443e"/>
+    <polygon points="-32,118 -36,128 -20,120" fill="#1a2520"/>
+    <rect x="65" y="78" width="14" height="40" fill="#36443e"/>
+    <polygon points="65,118 70,128 80,120" fill="#1a2520"/>
+
+    <!-- Glowing dorsal plates along the back/tail -->
+    <g filter="url(#softGlow)">
+      <polygon points="38,55  53,30  68,55"   fill="#9fe4ff"/>
+      <polygon points="55,75  72,45  87,75"   fill="#bfeaff"/>
+      <polygon points="78,100 95,68 110,100"  fill="#9fe4ff"/>
+      <polygon points="100,130 117,98 132,128" fill="#bfeaff"/>
+      <polygon points="124,160 138,128 150,158" fill="#9fe4ff"/>
+      <polygon points="148,180 160,150 172,176" fill="#bfeaff"/>
+    </g>
+    <!-- Halo glow behind plates -->
+    <ellipse cx="100" cy="100" rx="120" ry="50" fill="url(#plateGlow)" opacity="0.55" filter="url(#bigGlow)"/>
+  </g>
+
+  <!-- Title text -->
+  <g>
+    <!-- Drop-shadow / outline -->
+    <text x="40" y="170"
+          font-family="'Trebuchet MS', 'Verdana', sans-serif"
+          font-size="138" font-weight="900"
+          fill="#000000" opacity="0.55"
+          transform="translate(6, 6)">DinoGrow</text>
+    <text x="40" y="170"
+          font-family="'Trebuchet MS', 'Verdana', sans-serif"
+          font-size="138" font-weight="900"
+          fill="url(#beam)">DinoGrow</text>
+    <text x="40" y="170"
+          font-family="'Trebuchet MS', 'Verdana', sans-serif"
+          font-size="138" font-weight="900"
+          fill="none" stroke="#ffffff" stroke-width="2.5">DinoGrow</text>
+    <!-- Subtitle -->
+    <text x="46" y="218"
+          font-family="'Trebuchet MS', 'Verdana', sans-serif"
+          font-size="32" font-weight="700"
+          fill="#ffd24a" stroke="#000" stroke-width="0.5">
+      Eat. Grow. Become a GIANT.
+    </text>
+  </g>
+
+  <!-- Lower right call-to-action sticker -->
+  <g transform="translate(1300, 720)">
+    <rect x="0" y="0" width="280" height="60" rx="30" ry="30"
+          fill="#ffd24a" stroke="#000" stroke-width="3"/>
+    <text x="140" y="40"
+          font-family="'Trebuchet MS', 'Verdana', sans-serif"
+          font-size="26" font-weight="900"
+          fill="#1a1a2e" text-anchor="middle">14 LEVELS • 11 DINOS</text>
+  </g>
+</svg>
