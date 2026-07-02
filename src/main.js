@@ -32,6 +32,11 @@ import { spawnGroundMilitary, updateGroundMilitary } from './groundMilitary.js';
 import { spawnKaiju, updateKaiju, kaijuBlocksAOE } from './kaiju.js';
 import { spawnLandmarks, updateLandmarks } from './landmarks.js';
 import { audio } from './audio.js';
+import {
+  initHudFx, spawnScorePopup, bumpCombo, getComboMult,
+  tickCombo, resetCombo, flashScreen,
+  pingChromaticAberration, tickChromaticAberration,
+} from './hudFx.js';
 import { ParticleSystem } from './particles.js';
 import {
   spawnBerries,
@@ -85,6 +90,9 @@ scene.fog = new THREE.FogExp2(0xeac49a, 0.011);
 
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
 camera.position.set(0, 8, 12);
+
+// Hook up HUD juice (score popups + combo counter project through this cam).
+initHudFx(camera);
 
 // ----- Lighting (theme-driven; re-applied on level change) -----
 const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.65);
@@ -293,6 +301,40 @@ let score = 0;
 let gameRunning = false;
 let hasWon = false;      // win celebration only shows once per run
 let shake = 0;           // current screen-shake intensity
+
+// Camera cinematics — slow-motion + zoom pulse for big moments.
+let slowMoTimer = 0;
+let slowMoFactor = 1;
+let camZoomTimer = 0;
+let camZoomDuration = 0.6;
+let camZoomAmount = 0;   // 0 = normal, positive = pull camera closer (multiplier reduction)
+
+function triggerSlowMo(duration = 0.4, factor = 0.35) {
+  slowMoTimer = duration;
+  slowMoFactor = factor;
+}
+function triggerCamZoom(duration = 0.6, amount = 0.4) {
+  camZoomTimer = duration;
+  camZoomDuration = duration;
+  camZoomAmount = amount;
+}
+
+// Central kill-reward helper: adds combo-multiplied score, spawns a
+// floating popup at the world position, and bumps the combo counter.
+// Callers pass the base score + base growth; the multiplier is applied
+// here so every kill route feels rewarding without a rebalance pass.
+function awardKill(worldPos, baseScore, baseGrowth = 0, opts = {}) {
+  const mult = getComboMult();
+  const finalScore = Math.round(baseScore * mult);
+  score += finalScore;
+  if (baseGrowth > 0) addGrowth(baseGrowth * mult);
+  bumpCombo();
+  if (worldPos) {
+    const color = opts.color || (opts.big ? '#ff6a3a' : '#ffd24a');
+    spawnScorePopup(worldPos, '+' + finalScore, color, opts.big ? 'big' : 'normal');
+  }
+  return finalScore;
+}
 let stepThumpTimer = 0;  // throttles giant-stage footstep sounds
 
 // Active power-up state on the player
@@ -516,6 +558,7 @@ function startGame(species) {
   // updateBossTick ticks the timer down each frame.
   bossSpawnTimer = BOSS_DATA[selectedLevelKey] ? BOSS_SPAWN_DELAY : 0;
   score = 0;
+  resetCombo();
   hasWon = gameSettings.startGiant; // skip win celebration if you started there
   power.active = null;
   power.timeLeft = 0;
@@ -1150,7 +1193,16 @@ function frame() {
     requestAnimationFrame(frame);
     return;
   }
-  const dt = Math.min(0.05, rawDt);
+  const clampedDt = Math.min(0.05, rawDt);
+  // Slow-motion cinematic: real-time countdown, but the world tick uses
+  // a slowed dt so animations, physics, and abilities all crawl. The
+  // camera + HUD still tick at real speed so shake + popups feel fluid.
+  let worldSlow = 1;
+  if (slowMoTimer > 0) {
+    slowMoTimer = Math.max(0, slowMoTimer - rawDt);
+    worldSlow = slowMoFactor;
+  }
+  const dt = clampedDt * worldSlow;
 
   if (gameRunning) {
     updatePlayer(dt);
@@ -1182,8 +1234,14 @@ function frame() {
   if (weather && player) weather.update(dt, player.position);
   updateDayNight(dt);
 
-  // Decay screen shake
-  if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
+  // Combo + chromatic aberration + camera-zoom timers tick at real
+  // time (independent of slow-mo) so juice feels responsive.
+  tickCombo(clampedDt);
+  tickChromaticAberration(clampedDt);
+  if (camZoomTimer > 0) camZoomTimer = Math.max(0, camZoomTimer - clampedDt);
+
+  // Decay screen shake (real time so slow-mo doesn't stall the shake)
+  if (shake > 0) shake = Math.max(0, shake - clampedDt * 1.5);
 
   // Drift the clouds across the sky
   if (clouds) animateClouds(clouds, dt);
@@ -1379,7 +1437,17 @@ function onBossDefeated() {
   shake = Math.max(shake, 0.6);
   haptics.huge();
   audio.win();
-  score += boss ? boss.userData.score : 100;
+  const bossScore = boss ? boss.userData.score : 100;
+  const mult = getComboMult();
+  const finalBossScore = Math.round(bossScore * mult);
+  score += finalBossScore;
+  // Full "BOSS DOWN" cinematic
+  triggerSlowMo(0.6, 0.25);
+  triggerCamZoom(1.0, 0.5);
+  flashScreen('#ffd24a', 0.75);
+  pingChromaticAberration(0.7);
+  spawnScorePopup(pos, '+' + finalBossScore, '#ffd24a', 'big');
+  bumpCombo();
   showFact('BOSS DEFEATED! ' + (boss && boss.userData.name) + ' has fallen!');
   save.incStat('bossesDefeated');
   save.checkAchievements({ playedLevelKey: selectedLevelKey, currentStage: player.userData.stage });
@@ -1448,13 +1516,20 @@ function onMothLarva(worldPos) {
 function downKaiju(ent) {
   if (!kaiju) return;
   const u = ent.userData;
+  const pos = ent.position.clone();
   particles.debris(ent.position);
   particles.sparkles(ent.position);
   particles.sparkles(ent.position.clone().add(new THREE.Vector3(0, 3, 0)));
   audio.crumble && audio.crumble();
   shake = Math.max(shake, 0.9);
   haptics.huge();
-  score += u.score || 100;
+  const mult = bumpCombo();
+  const base = u.score || 100;
+  const gained = Math.round(base * mult);
+  score += gained;
+  spawnScorePopup(pos, '+' + gained, '#ff6a3a', 'big');
+  flashScreen('#ff8a3a', 0.35);
+  triggerCamZoom(0.7, 0.35);
   addAtomicCharge(u.atomicCharge || 15);
   addGrowth(u.nutrition || 8);
   runStats.kaijuDowned = (runStats.kaijuDowned || 0) + 1;
@@ -1485,22 +1560,31 @@ function downLandmark(obj) {
   audio.crumble && audio.crumble();
   shake = Math.max(shake, 0.5);
   haptics.huge();
+  const pos = obj.position.clone();
+  const mult = bumpCombo();
   if (u.kind === 'reactor') {
-    // Special: drink the reactor, charge bar fills instantly
     if (player && player.userData.species === 'titan') {
       player.userData.atomicCharge = ATOMIC_CHARGE_MAX;
       player.userData.atomicChargeFullJustNow = true;
       audio.atomicFull && audio.atomicFull();
       updateAtomicHUD();
+      flashScreen('#66e6ff', 0.5);
     }
-    score += u.score || 80;
+    const gained = Math.round((u.score || 80) * mult);
+    score += gained;
+    spawnScorePopup(pos, '+' + gained, '#66e6ff', 'big');
     addGrowth(8);
     runStats.reactorsEaten = (runStats.reactorsEaten || 0) + 1;
     updateObjectiveProgress();
     checkObjectiveComplete();
     landmarks.remove(obj);
   } else {
-    score += u.score || 50;
+    const baseScore = u.score || 50;
+    const gained = Math.round(baseScore * mult);
+    score += gained;
+    // Megatowers / rockets / oil rigs get a big popup
+    const bigTarget = baseScore >= 150 || u.subtype === 'megatower' || u.subtype === 'oilRig' || u.subtype === 'rocket';
+    spawnScorePopup(pos, '+' + gained, bigTarget ? '#ff6a3a' : '#ffd24a', bigTarget ? 'big' : 'normal');
     addGrowth(3);
     if (u.subtype === 'oilRig') {
       runStats.oilRigsToppled = (runStats.oilRigsToppled || 0) + 1;
@@ -1515,13 +1599,18 @@ function downLandmark(obj) {
 function downGroundEnemy(ent) {
   if (!groundMilitary) return;
   const u = ent.userData;
+  const pos = ent.position.clone();
   particles.debris(ent.position);
   particles.dust(ent.position);
   if (u.groundType === 'silo' || u.groundType === 'tank') {
     audio.crumble && audio.crumble();
     shake = Math.max(shake, 0.4);
   }
-  score += u.score || 10;
+  const mult = bumpCombo();
+  const gained = Math.round((u.score || 10) * mult);
+  score += gained;
+  const isBig = u.groundType === 'tank' || u.groundType === 'silo';
+  spawnScorePopup(pos, '+' + gained, isBig ? '#ff8a3a' : '#ffd88a', isBig ? 'big' : 'normal');
   addAtomicCharge(u.atomicCharge || 5);
   addGrowth(u.nutrition || 2);
   runStats.groundDestroyed = (runStats.groundDestroyed || 0) + 1;
@@ -1546,11 +1635,16 @@ function downGroundEnemy(ent) {
 function downAirEnemy(ent, fromBeam = false) {
   if (!airEnemies) return;
   const u = ent.userData;
+  const pos = ent.position.clone();
   particles.debris(ent.position);
   particles.sparkles(ent.position);
   audio.crumble && audio.crumble();
   shake = Math.max(shake, fromBeam ? 0.4 : 0.25);
-  score += u.score || 10;
+  const mult = bumpCombo();
+  const gained = Math.round((u.score || 10) * mult);
+  score += gained;
+  const isBig = u.airType === 'jet';
+  spawnScorePopup(pos, '+' + gained, isBig ? '#ff8a3a' : '#88e6ff', isBig ? 'big' : 'normal');
   addAtomicCharge(u.atomicCharge || 5);
   addGrowth(u.nutrition || 2);
   airEnemies.remove(ent);
@@ -2036,6 +2130,12 @@ function fireMegaBeam() {
   plateFlash = 1.4;
   haptics.huge();
   shake = Math.max(shake, 1.0);
+  // Full cinematic: slow-mo + camera zoom + fullscreen cyan flash +
+  // chromatic aberration ping. This is the marquee moment for Titan.
+  triggerSlowMo(0.45, 0.30);
+  triggerCamZoom(0.75, 0.45);
+  flashScreen('#c8f0ff', 0.7);
+  pingChromaticAberration(0.6);
   titanBeamMode = 'mega';
   megaBeamLife = 0.85;
   const yaw = player.rotation.y - (player.userData.faceFlip || 0);
@@ -2969,11 +3069,15 @@ function handleEating(dt) {
     if (!touching) continue;
 
     if (ent.userData.kind === 'critter') {
+      const pos = ent.position.clone();
       particles.meat(ent.position);
       audio.chompCritter();
       entities.remove(ent);
-      addGrowth(ent.userData.nutrition * growthMult);
-      score += 3;
+      const mult = bumpCombo();
+      addGrowth(ent.userData.nutrition * growthMult * mult);
+      const gained = Math.round(3 * mult);
+      score += gained;
+      spawnScorePopup(pos, '+' + gained, '#ffe08a');
       recordEvent('crittersEaten');
       haptics.chomp();
       showFact(factForCritter());
@@ -2983,13 +3087,17 @@ function handleEating(dt) {
       const canEat = apex || gameSettings.invincible || frenzyTimer > 0 ||
                      playerScale >= enemyScale * 0.95;
       if (canEat) {
+        const pos = ent.position.clone();
         particles.meat(ent.position);
         if (ent.userData.stage >= 3) audio.chompBig();
         else audio.chompCritter();
         showFact(factForSpecies(ent.userData.species));
         entities.remove(ent);
-        addGrowth(ent.userData.nutrition * growthMult);
-        score += 10 + ent.userData.stage * 5;
+        const mult = bumpCombo();
+        addGrowth(ent.userData.nutrition * growthMult * mult);
+        const gained = Math.round((10 + ent.userData.stage * 5) * mult);
+        score += gained;
+        spawnScorePopup(pos, '+' + gained, '#ffd24a', ent.userData.stage >= 3 ? 'big' : 'normal');
         recordEvent('dinosEaten');
         haptics.big();
         shake = Math.max(shake, 0.1 + ent.userData.stage * 0.05);
@@ -3039,6 +3147,8 @@ function gameOver() {
   audio.gameOver();
   particles.meat(player.position);
   shake = 0.35;
+  resetCombo();
+  flashScreen('#c02040', 0.6);
   gameOverEl.classList.remove('hidden');
 }
 
@@ -3048,14 +3158,26 @@ function updateCamera(dt) {
   const stage = player.userData.stage;
   // Pull the camera back for a bigger player so the whole beast stays in frame.
   const sizeBoost = gameSettings.mega ? 2.2 : 1.0;
-  const heightOffset = (8 + stage * 1.5) * sizeBoost;
-  const backOffset = (10 + stage * 2) * sizeBoost;
+  // Cinematic zoom: pop the camera closer for a moment, ease back. Peak
+  // zoom at t=0.15 into the pulse, then linear ease back to normal.
+  let zoomFactor = 1;
+  if (camZoomTimer > 0) {
+    const t = 1 - (camZoomTimer / camZoomDuration);
+    const zoomProfile = t < 0.15
+      ? (t / 0.15) * camZoomAmount
+      : camZoomAmount * (1 - (t - 0.15) / 0.85);
+    zoomFactor = 1 - zoomProfile; // 0.6..1.0 for amount=0.4
+  }
+  const heightOffset = (8 + stage * 1.5) * sizeBoost * zoomFactor;
+  const backOffset = (10 + stage * 2) * sizeBoost * zoomFactor;
   const targetX = player.position.x;
   const targetZ = player.position.z + backOffset;
   const targetY = player.position.y + heightOffset;
-  camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * 4);
-  camera.position.y += (targetY - camera.position.y) * Math.min(1, dt * 4);
-  camera.position.z += (targetZ - camera.position.z) * Math.min(1, dt * 4);
+  // Faster lerp during a zoom pulse so the camera snaps in
+  const lerpRate = camZoomTimer > 0 ? 10 : 4;
+  camera.position.x += (targetX - camera.position.x) * Math.min(1, dt * lerpRate);
+  camera.position.y += (targetY - camera.position.y) * Math.min(1, dt * lerpRate);
+  camera.position.z += (targetZ - camera.position.z) * Math.min(1, dt * lerpRate);
   // Screen shake offset (decays in frame())
   if (shake > 0) {
     camera.position.x += (Math.random() - 0.5) * shake;

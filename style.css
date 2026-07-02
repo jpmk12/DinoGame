@@ -679,6 +679,126 @@ html, body {
   to   { box-shadow: 0 0 22px rgba(200, 247, 255, 1.0); }
 }
 
+/* ---------- Juice: score popups, combo, screen flash ---------- */
+#fx-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+.score-popup {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: 'Trebuchet MS', 'Verdana', sans-serif;
+  font-weight: 900;
+  font-size: 28px;
+  color: #ffd24a;
+  text-shadow:
+    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    0 3px 6px rgba(0,0,0,0.6);
+  animation: scorePopupRise 1.2s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+  --drift-x: 0px;
+  will-change: transform, opacity;
+}
+.score-popup.big {
+  font-size: 44px;
+  color: #ff6a3a;
+}
+@keyframes scorePopupRise {
+  0%  { transform: translate(-50%, 0) scale(0.4); opacity: 0; }
+  15% { transform: translate(-50%, -12px) scale(1.15); opacity: 1; }
+  30% { transform: translate(calc(-50% + var(--drift-x) * 0.3), -30px) scale(1); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--drift-x)), -100px) scale(0.85); opacity: 0; }
+}
+
+#screen-flash {
+  position: fixed;
+  inset: 0;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 35;
+  mix-blend-mode: screen;
+  --flash-peak: 0.5;
+}
+#screen-flash.flash {
+  animation: screenFlash 0.35s ease-out forwards;
+}
+@keyframes screenFlash {
+  0%   { opacity: 0; }
+  15%  { opacity: var(--flash-peak); }
+  100% { opacity: 0; }
+}
+
+/* Chromatic aberration on the WebGL canvas (CSS-driven, no shader) */
+#game.chromatic {
+  filter: contrast(1.05)
+          drop-shadow(2px 0 0 rgba(255, 60, 60, 0.55))
+          drop-shadow(-2px 0 0 rgba(60, 200, 255, 0.55));
+  transition: filter 0.12s ease-out;
+}
+
+#combo-hud {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid #ff8a3a;
+  border-radius: 16px;
+  z-index: 25;
+  color: #fff;
+  font-family: 'Trebuchet MS', 'Verdana', sans-serif;
+  font-weight: 900;
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: none;
+  min-width: 190px;
+}
+#combo-hud .combo-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+}
+#combo-count {
+  font-size: 32px;
+  color: #ffd24a;
+  line-height: 1;
+}
+#combo-label {
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: #ffb060;
+}
+#combo-mult {
+  font-size: 18px;
+  color: #ff8a3a;
+  margin-left: 4px;
+}
+#combo-bar {
+  margin-top: 4px;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
+  overflow: hidden;
+}
+#combo-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ffd24a, #ff5a3a);
+  transition: width 0.1s linear;
+}
+#combo-hud.bump {
+  animation: comboBump 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes comboBump {
+  0%   { transform: translateX(-50%) scale(1); box-shadow: 0 0 4px rgba(255, 138, 58, 0.4); }
+  40%  { transform: translateX(-50%) scale(1.18); box-shadow: 0 0 24px rgba(255, 138, 58, 0.95); }
+  100% { transform: translateX(-50%) scale(1); box-shadow: 0 0 4px rgba(255, 138, 58, 0.4); }
+}
+
 /* ---------- Baby indicator ---------- */
 #baby-indicator {
   display: flex;

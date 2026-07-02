@@ -25,6 +25,20 @@
 <body>
   <canvas id="game"></canvas>
 
+  <!-- Fullscreen effect layers (behind HUD, above canvas) -->
+  <div id="fx-container"></div>
+  <div id="screen-flash"></div>
+
+  <!-- Combo counter (top center, hidden until combo >= 2) -->
+  <div id="combo-hud" class="hidden">
+    <div class="combo-row">
+      <span id="combo-count">2</span>
+      <span id="combo-label">COMBO</span>
+      <span id="combo-mult">1.1x</span>
+    </div>
+    <div id="combo-bar"><div id="combo-fill"></div></div>
+  </div>
+
   <div id="hud" class="hidden">
     <div id="stage-label">Hatchling</div>
     <div id="growth-bar"><div id="growth-fill"></div></div>
